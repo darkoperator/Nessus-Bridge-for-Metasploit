@@ -1,1 +1,10 @@
-Stuff
+Nessus Bridge for Metasploit
+============================
+
+This plugin and library is designed to allow you to manage a nessus server complete with scans, reports, plugins and users from within Metasploit.
+
+Concists of:
+
+plugins/nessus.rb
+lib/nessus/nessus-xmlrpc.rb
+
