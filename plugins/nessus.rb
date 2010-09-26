@@ -253,6 +253,11 @@ class Plugin::Nessus < Msf::Plugin
 		
 		def cmd_nessus_connect(*args)
 			
+			if nessus_verify_token
+				print_error("You are already authenticated.  Call nessus_logout before authing again")
+				return
+			end
+			
 			if(args.length == 0 or args[0].empty? or args[0] == "-h")
 				ncusage
 				return
