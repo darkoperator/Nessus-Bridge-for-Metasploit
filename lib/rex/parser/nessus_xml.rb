@@ -2,7 +2,7 @@ module Rex
 module Parser
 
 class NessusXMLStreamParser
-
+#
 	attr_accessor :callback
 
 	def initialize(callback = nil)
