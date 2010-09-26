@@ -1259,5 +1259,3 @@ end
 
 # look at seeing how nessus_scan_new works with ip addresses, can use a file?  How about select from the db?  yeah db would be cool.
 
-#stuff
-
