@@ -64,13 +64,9 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_logout
-			if ! nessus_verify_token
-				return
-			end
-			
-			logout = @n.logout
-			
-			puts logout
+			@token = nil
+			print_status("Logged out")
+			return
 		end
 		
 		def cmd_nessus_help(*args)
@@ -219,14 +215,9 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def nessus_verify_token
-			if ! @token
-				if ((@user and @user.length > 0) and (@host and @host.length > 0) and (@port and @port.length > 0 and @port.to_i > 0) and (@pass and @pass.length > 0))
-					nessus_login
-					return
-				else
-					#ncusage
-					return
-				end
+			if @token.nil? or @token == ''
+					ncusage
+					return false
 			end
 			
 			true
@@ -244,21 +235,47 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def ncusage
+			print_status("%redYou must do this before any other commands.%clr")
 			print_status("Usage: ")
 			print_status("       nessus_connect username:password@hostname:port <ssl ok>")
 			print_status(" Example:> nessus_connect msf:msf@192.168.1.10:8834 ok")
+			print_status("          OR")
+			print_status("       nessus_connect username@hostname:port <ssl ok>")
+			print_status(" Example:> nessus_connect msf@192.168.1.10:8834 ok")
+			print_status("          OR")
+			print_status("       nessus_connect hostname:port <ssl ok>")
+			print_status(" Example:> nessus_connect 192.168.1.10:8834 ok")
 			return
 		end
 
 		
 		def cmd_nessus_connect(*args)
 			
-			if nessus_verify_token
+			if args[0] == "-h"
+				print_status("%redYou must do this before any other commands.%clr")
+				print_status("Usage: ")
+				print_status("       nessus_connect username:password@hostname:port <ssl ok>")
+				print_status(" Example:> nessus_connect msf:msf@192.168.1.10:8834 ok")
+				print_status("		OR")
+				print_status("       nessus_connect username@hostname:port <ssl ok>")
+				print_status(" Example:> nessus_connect msf@192.168.1.10:8834 ok")
+				print_status("		OR")
+				print_status("       nessus_connect hostname:port <ssl ok>")
+				print_status(" Example:> nessus_connect 192.168.1.10:8834 ok")
+				print_status()
+				print_status("%bldusername%clr and %bldpassword%clr are the ones you use to login to the nessus web front end")
+				print_status("%bldhostname%clr can be an ip address or a dns name of the web front end.")
+				print_status("%bldport%clr is the standard that the nessus web front end runs on : 8834.  This is NOT 1241.")
+				print_status("The \"ok\" on the end is important.  It is a way of letting you")
+				print_status("know that nessus used a self signed cert and the risk that presents.")
+			end
+			
+			if ! @token == ''
 				print_error("You are already authenticated.  Call nessus_logout before authing again")
 				return
 			end
 			
-			if(args.length == 0 or args[0].empty? or args[0] == "-h")
+			if(args.length == 0 or args[0].empty?)
 				ncusage
 				return
 			end
@@ -348,7 +365,15 @@ class Plugin::Nessus < Msf::Plugin
 			
 		end
 		
-		def cmd_nessus_report_list
+		def cmd_nessus_report_list(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_list")
+				print_status(" Example:> nessus_report_list")
+				print_status()
+				print_status("Generates a list of all reports visable to your user.")
+			end
 			
 			if ! nessus_verify_token
 				return
@@ -377,6 +402,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_report_get(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_get <report id>")
+				print_status(" Example:> nessus_report_get f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("This command pulls the provided report from the nessus server in the nessusv2 format")
+				print_status("and parses it the same way db_import_nessus does.  After it is parsed it will be")
+				print_status("available to commands such as db_hosts, db_vulns, db_services and db_autopwn.")
+				print_status("Use: nessus_report_list to obtain a list of report id's")
+			end
 			
 			if ! nessus_verify_token
 				return
@@ -411,9 +447,20 @@ class Plugin::Nessus < Msf::Plugin
 			
 		end
 		
-		def cmd_nessus_scan_status
-			#need to expand this to list policies and templates too.
-			nessus_login
+		def cmd_nessus_scan_status(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_status")
+				print_status(" Example:> nessus_scan_status")
+				print_status()
+				print_status("Returns a list of information about currently running scans.")
+			end
+			
+			if ! nessus_verify_token
+				return
+			end
+			
 			list=@n.scan_list_hash
 			if list.empty?
 				print_status("No Scans Running.")
@@ -448,9 +495,22 @@ class Plugin::Nessus < Msf::Plugin
 			print_good("		Pause a nessus scan : 			nessus_scan_pause <scanid>")
 		end
 		
-		def cmd_nessus_user_list
+		def cmd_nessus_user_list(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_user_list")
+				print_status(" Example:> nessus_user_list")
+				print_status()
+				print_status("Returns a list of the users on the Nessus server and their access level.")
+			end
+			
 			if ! nessus_verify_token
 				return
+			end
+			
+			if ! @n.is_admin
+				print_status("Your Nessus user is not an admin")
 			end
 			
 			list=@n.users_list
@@ -472,15 +532,23 @@ class Plugin::Nessus < Msf::Plugin
 			$stdout.puts tbl.to_s + "\n"
 		end
 		
-		def cmd_nessus_server_status
+		def cmd_nessus_server_status(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_server_status")
+				print_status(" Example:> nessus_server_status")
+				print_status()
+				print_status("Returns some status items for the server..")
+			end
 			#Auth
 			if ! nessus_verify_token
 				return
 			end
 			
 			#Check if we are an admin
-			if @n.is_admin
-				print_status("Your Nessus user is an admin")
+			if ! @n.is_admin
+				print_status("You need to be an admin for this.")
 			end
 			
 			#Versions
@@ -523,9 +591,17 @@ class Plugin::Nessus < Msf::Plugin
 			$stdout.puts tbl.to_s + "\n"
 		end
 		
-		def cmd_nessus_plugin_list
+		def cmd_nessus_plugin_list(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_plugin_list")
+				print_status(" Example:> nessus_plugin_list")
+				print_status()
+				print_status("Returns a list of the plugins on the server per family.")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -551,8 +627,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_scan_new(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_new <policy id> <scan name> <targets>")
+				print_status(" Example:> nessus_scan_new 1 \"My Scan\" 192.168.1.250")
+				print_status()
+				print_status("Creates a scan based on a policy id and targets.")
+				print_status("use nessus_policy_list to list all available policies")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -578,8 +663,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_scan_pause(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_pause <scan id>")
+				print_status(" Example:> nessus_scan_pause f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Pauses a running scan")
+				print_status("use nessus_scan_status to list all available scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -599,8 +693,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_scan_resume(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_resume <scan id>")
+				print_status(" Example:> nessus_scan_resume f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("resumes a running scan")
+				print_status("use nessus_scan_status to list all available scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -620,8 +723,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_report_hosts(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_hosts <report id>")
+				print_status(" Example:> nessus_report_hosts f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Returns all the hosts associated with a scan and details about their vulnerabilities")
+				print_status("use nessus_report_list to list all available scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -659,8 +771,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_report_host_ports(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_host_ports <hostname> <report id>")
+				print_status(" Example:> nessus_report_host_ports 192.168.1.250 f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Returns all the ports associated with a host and details about their vulnerabilities")
+				print_status("use nessus_report_hosts to list all available hosts for a report")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -699,8 +820,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_report_host_detail(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_host_detail <hostname> <port> <protocol> <report id>")
+				print_status(" Example:> nessus_report_host_ports 192.168.1.250 445 tcp f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Returns all the vulns associated with a port for a specific host")
+				print_status("use nessus_report_host_ports to list all available ports for a host")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -739,9 +869,18 @@ class Plugin::Nessus < Msf::Plugin
 			$stdout.puts tbl.to_s + "\n"
 		end
 		
-		def cmd_nessus_scan_pause_all
+		def cmd_nessus_scan_pause_all(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_pause_all")
+				print_status(" Example:> nessus_scan_pause_all")
+				print_status()
+				print_status("Pauses all currently running scans")
+				print_status("use nessus_scan_list to list all running scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -751,8 +890,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_scan_stop(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_stop <scan id>")
+				print_status(" Example:> nessus_scan_stop f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Stops a currently running scans")
+				print_status("use nessus_scan_list to list all running scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -771,9 +919,18 @@ class Plugin::Nessus < Msf::Plugin
 			print_status("#{sid} has been stopped")
 		end
 		
-		def cmd_nessus_scan_stop_all
+		def cmd_nessus_scan_stop_all(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_stop_all")
+				print_status(" Example:> nessus_scan_stop_all")
+				print_status()
+				print_status("stops all currently running scans")
+				print_status("use nessus_scan_list to list all running scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -782,9 +939,18 @@ class Plugin::Nessus < Msf::Plugin
 			print_status("All scans have been stopped")
 		end
 		
-		def cmd_nessus_scan_resume_all
+		def cmd_nessus_scan_resume_all(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_scan_resume_all")
+				print_status(" Example:> nessus_scan_resume_all")
+				print_status()
+				print_status("resumes all currently running scans")
+				print_status("use nessus_scan_list to list all running scans")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -794,8 +960,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_user_add(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_user_add <username> <password>")
+				print_status(" Example:> nessus_user_add msf msf")
+				print_status()
+				print_status("Only adds non admin users. Must be an admin to add users.")
+				print_status("use nessus_user_list to list all users")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -832,8 +1007,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_user_del(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_user_del <username>")
+				print_status(" Example:> nessus_user_del msf")
+				print_status()
+				print_status("Only dels non admin users. Must be an admin to del users.")
+				print_status("use nessus_user_list to list all users")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -862,8 +1046,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_user_passwd(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_user_passwd <username> <password>")
+				print_status(" Example:> nessus_user_passwd msf newpassword")
+				print_status()
+				print_status("Changes the password of a user. Must be an admin to change passwords.")
+				print_status("use nessus_user_list to list all users")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -892,9 +1085,18 @@ class Plugin::Nessus < Msf::Plugin
 			end
 		end
 		
-		def cmd_nessus_admin
+		def cmd_nessus_admin(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_admin")
+				print_status(" Example:> nessus_admin")
+				print_status()
+				print_status("Checks to see if the current user is an admin")
+				print_status("use nessus_user_list to list all users")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -906,8 +1108,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_plugin_family(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_plugin_family <plugin family name>")
+				print_status(" Example:> nessus_plugin_family \"Windows : Microsoft Bulletins\" ")
+				print_status()
+				print_status("Returns a list of all plugins in that family.")
+				print_status("use nessus_plugin_list to list all users")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -940,9 +1151,18 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_find_targets(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_find targets <report id>")
+				print_status(" Example:> nessus_find_targets f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Finds targets in a scan with CVSS2 > 7 and returns some info.")
+				print_status("%redThis plugin is experimental%clr")
+			end
+			
 			#given a report ID, find hosts that are the most vulnerable.  Try to match to metasploit exploits if we can.
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -999,7 +1219,16 @@ class Plugin::Nessus < Msf::Plugin
 			
 		end
 		
-		def cmd_nessus_policy_list
+		def cmd_nessus_policy_list(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_policy_list")
+				print_status(" Example:> nessus_policy_list")
+				print_status()
+				print_status("Lists all policies on the server")
+			end
+			
 			if ! nessus_verify_token
 				return
 			end
@@ -1022,8 +1251,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_policy_del(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_policy_del <policy ID>")
+				print_status(" Example:> nessus_policy_del 1")
+				print_status()
+				print_status("Must be an admin to del policies.")
+				print_status("use nessus_policy_list to list all policies")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -1060,8 +1298,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_plugin_details(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_plugin_details <plugin file name>")
+				print_status(" Example:> nessus_plugin_details ping_host.nasl ")
+				print_status()
+				print_status("Returns details on a particular plugin.")
+				print_status("use nessus_plugin_list to list all plugins")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -1103,8 +1350,17 @@ class Plugin::Nessus < Msf::Plugin
 		end
 		
 		def cmd_nessus_report_del(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_report_del <reportname>")
+				print_status(" Example:> nessus_report_del f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				print_status()
+				print_status("Must be an admin to del reports.")
+				print_status("use nessus_report_list to list all reports")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -1142,9 +1398,17 @@ class Plugin::Nessus < Msf::Plugin
 			
 		end
 		
-		def cmd_nessus_server_prefs
+		def cmd_nessus_server_prefs(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_server_prefs")
+				print_status(" Example:> nessus_server_prefs")
+				print_status()
+				print_status("Returns a long list of server prefs.")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			
@@ -1169,9 +1433,17 @@ class Plugin::Nessus < Msf::Plugin
 			
 		end
 		
-		def cmd_nessus_plugin_prefs
+		def cmd_nessus_plugin_prefs(*args)
+			
+			if args[0] == "-h"
+				print_status("Usage: ")
+				print_status("       nessus_plugin_prefs")
+				print_status(" Example:> nessus_plugin_prefs")
+				print_status()
+				print_status("Returns a long list of plugin prefs.")
+			end
+			
 			if ! nessus_verify_token
-				nessus_login
 				return
 			end
 			

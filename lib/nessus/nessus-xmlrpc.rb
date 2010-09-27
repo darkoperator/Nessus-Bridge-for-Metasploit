@@ -104,7 +104,7 @@ class NessusXMLRPC
 		begin 
 		status = docxml.root.elements['status'].text
 		rescue
-			print("Error connecting/logging to the server!")
+			print_error("Error connecting/logging to the server!")
 		end
 		if status == "OK"
 			return docxml 
@@ -129,8 +129,7 @@ class NessusXMLRPC
 		begin
 			response = @https.request( request )
 		rescue 
-			#"[e] error connecting to server: "+ @nurl + " with URI: " + uri
-			@error = "stuff"
+			print_error("error connecting to server: #{@nurl} with URI: #{uri}")
 			exit
 		end
 		# puts response.body
@@ -151,24 +150,6 @@ class NessusXMLRPC
 			return @token
 		end
 			
-	end
-	
-	def logout
-		post = { "token" => @token }
-		docxml=nessus_request('logout', post)
-		status = docxml.root.elements['status'].text
-		
-		if status == "OK"
-			@token = ''
-		end
-	
-#	<?xml version='1.0' encoding='UTF-8'?>
-#<reply>
-#<seq/>
-#<status>OK</status>
-#<contents>OK</contents>
-#</reply>
-
 	end
 	
 	#checks to see if the user is an admin
