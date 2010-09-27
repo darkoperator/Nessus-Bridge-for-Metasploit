@@ -77,13 +77,13 @@ class Plugin::Nessus < Msf::Plugin
 			when "nessus_connect"
 				print_status("%redYou must do this before any other commands.%clr")
 				print_status("Usage: ")
-				print_status("       nessus_connect username:password@hostname:port <ssl ok>")
+				print_status("		nessus_connect username:password@hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect msf:msf@192.168.1.10:8834 ok")
 				print_status("		OR")
-				print_status("       nessus_connect username@hostname:port <ssl ok>")
+				print_status("		nessus_connect username@hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect msf@192.168.1.10:8834 ok")
 				print_status("		OR")
-				print_status("       nessus_connect hostname:port <ssl ok>")
+				print_status("		nessus_connect hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect 192.168.1.10:8834 ok")
 				print_status()
 				
@@ -94,13 +94,13 @@ class Plugin::Nessus < Msf::Plugin
 				print_status("know that nessus used a self signed cert and the risk that presents.")
 			when "nessus_report_list"
 				print_status("Usage: ")
-				print_status("       nessus_report_list")
+				print_status("		nessus_report_list")
 				print_status(" Example:> nessus_report_list")
 				print_status()
 				print_status("Generates a list of all reports visable to your user.")
 			when "nessus_report_get"
 				print_status("Usage: ")
-				print_status("       nessus_report_get <report id>")
+				print_status("		nessus_report_get <report id>")
 				print_status(" Example:> nessus_report_get f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
 				print_status()
 				print_status("This command pulls the provided report from the nessus server in the nessusv2 format")
@@ -108,12 +108,12 @@ class Plugin::Nessus < Msf::Plugin
 				print_status("available to commands such as db_hosts, db_vulns, db_services and db_autopwn.")
 			when "nessus_scan_status"
 				print_status("Usage: ")
-				print_status("       nessus_scan_status")
+				print_status("		nessus_scan_status")
 				print_status(" Example:> nessus_scan_status")
 				print_status()
 			when "nessus_server_status"
 				print_status("Usage: ")
-				print_status("       nessus_server_status")
+				print_status("		nessus_server_status")
 				print_status(" Example:> nessus_server_status")
 				print_status()
 			else
@@ -132,6 +132,7 @@ class Plugin::Nessus < Msf::Plugin
 					tbl << [ "nessus_admin", "Checks if user is an admin" ]
 					tbl << [ "nessus_server_feed", "Nessus Feed Type" ]
 					tbl << [ "nessus_find_targets", "Try to find vulnerable targets from a report" ]
+					tbl << [ "nessus_server_prefs", "Display Server Prefs" ]
 					tbl << [ "", ""]
 					tbl << [ "Reports Commands", "" ]
 					tbl << [ "-----------------", "-----------------"]
@@ -171,7 +172,7 @@ class Plugin::Nessus < Msf::Plugin
 					tbl << [ "nessus_policy_del", "Delete a policy" ]
 					
 					
-					#tbl << [ "nessus_server_prefs", "Display Server Prefs" ]
+					
 					
 					#tbl << [ "nessus_policy_new", "Save new policy" ]
 					
@@ -188,8 +189,7 @@ class Plugin::Nessus < Msf::Plugin
 					#tbl << [ "nessus_report_upload", "Upload nessusv2 report" ]
 				print_good("Nessus Help")
 				print_good("type nessus_help <command> for help with specific commands")
-				$stdout.puts "\n"
-				$stdout.puts tbl.to_s + "\n"
+				print_line("\n" + tbl.to_s + "\n")
 			
 			
 			end
@@ -208,8 +208,7 @@ class Plugin::Nessus < Msf::Plugin
 						])
 				tbl << [@feed, @version, @web_version]
 				print_good("Nessus Status")
-				$stdout.puts "\n"
-				$stdout.puts tbl.to_s + "\n"
+				print_line("\n" + tbl.to_s + "\n")
 			end
 			
 		end
@@ -237,13 +236,13 @@ class Plugin::Nessus < Msf::Plugin
 		def ncusage
 			print_status("%redYou must do this before any other commands.%clr")
 			print_status("Usage: ")
-			print_status("       nessus_connect username:password@hostname:port <ssl ok>")
+			print_status("		nessus_connect username:password@hostname:port <ssl ok>")
 			print_status(" Example:> nessus_connect msf:msf@192.168.1.10:8834 ok")
-			print_status("          OR")
-			print_status("       nessus_connect username@hostname:port <ssl ok>")
+			print_status("		OR")
+			print_status("		nessus_connect username@hostname:port <ssl ok>")
 			print_status(" Example:> nessus_connect msf@192.168.1.10:8834 ok")
-			print_status("          OR")
-			print_status("       nessus_connect hostname:port <ssl ok>")
+			print_status(" 		OR")
+			print_status(" 		nessus_connect hostname:port <ssl ok>")
 			print_status(" Example:> nessus_connect 192.168.1.10:8834 ok")
 			return
 		end
@@ -254,13 +253,13 @@ class Plugin::Nessus < Msf::Plugin
 			if args[0] == "-h"
 				print_status("%redYou must do this before any other commands.%clr")
 				print_status("Usage: ")
-				print_status("       nessus_connect username:password@hostname:port <ssl ok>")
+				print_status("		nessus_connect username:password@hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect msf:msf@192.168.1.10:8834 ok")
 				print_status("		OR")
-				print_status("       nessus_connect username@hostname:port <ssl ok>")
+				print_status("		nessus_connect username@hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect msf@192.168.1.10:8834 ok")
 				print_status("		OR")
-				print_status("       nessus_connect hostname:port <ssl ok>")
+				print_status("		nessus_connect hostname:port <ssl ok>")
 				print_status(" Example:> nessus_connect 192.168.1.10:8834 ok")
 				print_status()
 				print_status("%bldusername%clr and %bldpassword%clr are the ones you use to login to the nessus web front end")
@@ -369,7 +368,7 @@ class Plugin::Nessus < Msf::Plugin
 			
 			if args[0] == "-h"
 				print_status("Usage: ")
-				print_status("       nessus_report_list")
+				print_status("		nessus_report_list")
 				print_status(" Example:> nessus_report_list")
 				print_status()
 				print_status("Generates a list of all reports visable to your user.")
@@ -395,17 +394,16 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ report['id'], report['name'], report['status'], t.strftime("%H:%M %b %d %Y") ]
 			}
 			print_good("Nessus Report List")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			print_status("You can:")
-			print_status("        Get a list of hosts from the report:          nessus_report_hosts <report id>")
+			print_status("		Get a list of hosts from the report:		nessus_report_hosts <report id>")
 		end
 		
 		def cmd_nessus_report_get(*args)
 			
 			if args[0] == "-h"
 				print_status("Usage: ")
-				print_status("       nessus_report_get <report id>")
+				print_status("		nessus_report_get <report id>")
 				print_status(" Example:> nessus_report_get f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
 				print_status()
 				print_status("This command pulls the provided report from the nessus server in the nessusv2 format")
@@ -424,8 +422,8 @@ class Plugin::Nessus < Msf::Plugin
 			
 			if(args.length == 0 or args[0].empty? or args[0] == "-h")
 				print_status("Usage: ")	
-				print_status("       nessus_report_get <report id> ")
-				print_status("       use nessus_report_list to list all available reports for importing")
+				print_status("		nessus_report_get <report id> ")
+				print_status("use nessus_report_list to list all available reports for importing")
 				return
 			end
 			
@@ -436,8 +434,8 @@ class Plugin::Nessus < Msf::Plugin
 				rid = args[0]
 			else
 				print_status("Usage: ")
-				print_status("       nessus_report_get <report id> ")
-				print_status("       use nessus_report_list to list all available reports for importing")
+				print_status("		nessus_report_get <report id> ")
+				print_status("use nessus_report_list to list all available reports for importing")
 				return
 			end
 			
@@ -487,9 +485,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ scan['id'], scan['name'], scan['owner'], t.strftime("%H:%M %b %d %Y"), scan['status'], scan['current'], scan['total'] ]
 			}
 			print_good("Running Scans")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
-			$stdout.puts "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			print_status("You can:")
 			print_good("		Import Nessus report to database : 	nessus_report_get <reportid>")
 			print_good("		Pause a nessus scan : 			nessus_scan_pause <scanid>")
@@ -528,8 +524,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ user['name'], user['admin'], t.strftime("%H:%M %b %d %Y") ]
 			}
 			print_good("Nessus users")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_server_status(*args)
@@ -587,8 +582,7 @@ class Plugin::Nessus < Msf::Plugin
 			}
 			plugins = total.sum
 			tbl << [users, policies, scans, reports, plugins]
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_plugin_list(*args)
@@ -621,8 +615,7 @@ class Plugin::Nessus < Msf::Plugin
 			tbl << [ '', '']
 			tbl << [ 'Total Plugins', plugins ]
 			print_good("Plugins By Family")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			print_status("List plugins for a family : nessus_report_get <family name>")
 		end
 		
@@ -764,8 +757,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ host['hostname'], host['severity'], host['sev0'], host['sev1'], host['sev2'], host['sev3'], host['current'], host['total'] ]
 			}
 			print_good("Report Info")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			print_status("You can:")
 			print_status("        Get information from a particular host:          nessus_report_host_ports <hostname> <report id>")
 		end
@@ -813,8 +805,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ port['portnum'], port['protocol'], port['severity'], port['svcname'], port['sev0'], port['sev1'], port['sev2'], port['sev3'] ]
 			}
 			print_good("Host Info")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			print_status("You can:")
 			print_status("        Get detailed scan infromation about a specfic port: nessus_report_host_detail <hostname> <port> <protocol> <report id>")
 		end
@@ -865,8 +856,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ detail['port'], detail['severity'], detail['pluginID'], detail['pluginName'], detail['cvss_base_score'] || 'none', detail['exploit_available'] || '.', detail['cve'] || '.', detail['risk_factor'] || '.', detail['cvss_vector'] || '.' ]
 			}
 			print_good("Port Info")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_scan_pause_all(*args)
@@ -1146,8 +1136,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ plugin['id'], plugin['name'], plugin['filename'] ]
 			}
 			print_good("#{fam} Info")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_find_targets(*args)
@@ -1213,8 +1202,7 @@ class Plugin::Nessus < Msf::Plugin
 				}	
 			}
 			#print_good("Report Info")
-			#$stdout.puts "\n"
-			#$stdout.puts tbl.to_s + "\n"
+			#print_line("\n" + tbl.to_s + "\n")
 			
 			
 		end
@@ -1246,8 +1234,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ policy['id'], policy['name'], policy['owner'], policy['vis'] ]
 			}
 			print_good("Nessus Policy List")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_policy_del(*args)
@@ -1293,7 +1280,7 @@ class Plugin::Nessus < Msf::Plugin
 					print_error("Policy number #{pid} was not deleted")
 					end
 			else
-				print_error("wow that was close, damn we asked")
+				print_error("wow that was close, damn glad we asked")
 			end
 		end
 		
@@ -1345,8 +1332,7 @@ class Plugin::Nessus < Msf::Plugin
 			tbl << [ "Solution", entry['solution'] ]
 			tbl << [ "Plugin Pub Date", entry['plugin_publication_date'] ]
 			tbl << [ "Plugin Modification Date", entry['plugin_modification_date'] ]
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 		
 		def cmd_nessus_report_del(*args)
@@ -1428,8 +1414,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ pref['name'], pref['value'] ]
 			}
 			print_good("Nessus Server Pref List")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 			
 		end
 		
@@ -1464,8 +1449,7 @@ class Plugin::Nessus < Msf::Plugin
 				tbl << [ pref['prefname'], pref['prefvalues'], pref['preftype'] ]
 			}
 			print_good("Nessus Plugins Pref List")
-			$stdout.puts "\n"
-			$stdout.puts tbl.to_s + "\n"
+			print_line("\n" + tbl.to_s + "\n")
 		end
 	end
 	
@@ -1535,4 +1519,6 @@ end
 # add ability to save report in nbe/nessusv1/html format.  posibbly all at once.
 
 # look at seeing how nessus_scan_new works with ip addresses, can use a file?  How about select from the db?  yeah db would be cool.
+
+# fix table outputs to use  print_line("\n" + tbl.to_s + "\n")
 
