@@ -104,7 +104,7 @@ module NessusXMLRPC
 			begin
 				status = docxml.root.elements['status'].text
 			rescue
-				print_error("Error connecting/logging to the server!")
+				puts("Error connecting/logging to the server!")
 			end
 			if status == "OK"
 				return docxml
@@ -129,7 +129,7 @@ module NessusXMLRPC
 			begin
 				response = @https.request( request )
 			rescue
-				print_error("error connecting to server: #{@nurl} with URI: #{uri}")
+				puts("error connecting to server: #{@nurl} with URI: #{uri}")
 				exit
 			end
 			# puts response.body
