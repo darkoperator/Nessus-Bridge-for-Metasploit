@@ -665,6 +665,25 @@ module Msf
 				$stdout.puts tbl.to_s + "\n"
 				print_status("List plugins for a family : nessus_plugin_family <family name>")
 			end
+			
+			def check_policy(*args)
+				
+				case args.length
+				when 1
+					pid = args[0]
+				else
+					print_error("No Policy ID supplied.")
+					return
+				end
+				
+				pol = @n.policy_list_hash
+				pol.each {|p|
+					if p['id'] == pid
+						return false
+					end
+				}
+				return true
+			end
 		
 			def cmd_nessus_scan_new(*args)
 			
@@ -690,6 +709,11 @@ module Msf
 					print_status("Usage: ")
 					print_status("       nessus_scan_new <policy id> <scan name> <targets>")
 					print_status("       use nessus_policy_list to list all available policies")
+					return
+				end
+				
+				if check_policy(pid)
+					print_error("That policy does not exist.")
 					return
 				end
 			
