@@ -1,96 +1,111 @@
+require 'rexml/document'
+
 module Rex
 module Parser
 
-class NessusXMLStreamParser
+#
+# Stream parser for nmap -oX xml output
+#
+# Yields a hash representing each host found in the xml stream.  Each host
+# will look something like the following:
+#	{
+#		"status" => "up",
+#		"addrs"  => { "ipv4" => "192.168.0.1", "mac" => "00:0d:87:a1:df:72" },
+#		"ports"  => [
+#			{ "portid" => "22", "state" => "closed", ... },
+#			{ "portid" => "80", "state" => "open", ... },
+#			...
+#		]
+#	}
+#
+# Usage:
+# <tt>
+# parser = NmapXMLStreamParser.new { |host|
+#	# do stuff with the host
+# }
+# REXML::Document.parse_stream(File.new(nmap_xml), parser)
+# </tt>
+# -- or --
+# <tt>
+# parser = NmapXMLStreamParser.new
+# parser.on_found_host = Proc.new { |host|
+#	# do stuff with the host
+# }
+# REXML::Document.parse_stream(File.new(nmap_xml), parser)
+# </tt>
+#
+# This parser does not maintain state as well as a tree parser, so malformed
+# xml will trip it up.  Nmap shouldn't ever output malformed xml, so it's not
+# a big deal.
+#
+class NmapXMLStreamParser
 
-	attr_accessor :callback
+	attr_accessor :on_found_host
 
-	def initialize(callback = nil)
+	def initialize(&block)
 		reset_state
-		self.callback = callback if callback
+		on_found_host = block if block
 	end
 
 	def reset_state
-		@state = :generic_state
-		@host = { "status" => nil, "endpoints" => [], "names" => [], "vulns" => {} }
-		@vuln = { "refs" => [] }
+		@host = { "status" => nil, "addrs" => {}, "ports" => [] }
 	end
 
 	def tag_start(name, attributes)
 		case name
-		when "node"
-			@host["hardware-address"] = attributes["hardware-address"]
-			@host["addr"] = attributes["address"]
-			@host["status"] = attributes["status"]
-		when "os"
-			# Take only the highest certainty
-			if not @host["os_certainty"] or (@host["os_certainty"].to_f < attributes["certainty"].to_f)
-				@host["os_vendor"]    = attributes["vendor"]
-				@host["os_family"]    = attributes["family"]
-				@host["os_product"]   = attributes["product"]
-				@host["arch"]         = attributes["arch"]
-				@host["os_certainty"] = attributes["certainty"]
+		when "address"
+			@host["addrs"][attributes["addrtype"]] = attributes["addr"]
+			if (attributes["addrtype"] =~ /ipv[46]/)
+				@host["addr"] = attributes["addr"]
 			end
-		when "name"
-			#@host["names"].push attributes["name"]
-			@state = :in_name
-		when "endpoint"
-			# This is a port in NeXpose parlance
-			@host["endpoints"].push(attributes)
+		when "osclass"
+			@host["os_vendor"]   = attributes["vendor"]
+			@host["os_family"]   = attributes["osfamily"]
+			@host["os_version"]  = attributes["osgen"]
+			@host["os_accuracy"] = attributes["accuracy"]
+		when "osmatch"
+			if(attributes["accuracy"].to_i == 100)
+				@host["os_match"] = attributes["name"]
+			end
+		when "uptime"
+			@host["last_boot"]   = attributes["lastboot"]
+		when "hostname"
+			if(attributes["type"] == "PTR")
+				@host["reverse_dns"] = attributes["name"]
+			end
+		when "status"
+			# <status> refers to the liveness of the host; values are "up" or "down"
+			@host["status"] = attributes["state"]
+			@host["status_reason"] = attributes["reason"]
+		when "port"
+			@host["ports"].push(attributes)
+		when "state"
+			# <state> refers to the state of a port; values are "open", "closed", or "filtered"
+			@host["ports"].last["state"] = attributes["state"]
 		when "service"
-			@state = :in_service
 			# Store any service info with the associated port.  There shouldn't
 			# be any collisions on attribute names here, so just merge them.
-			@host["endpoints"].last.merge!(attributes)
-		when "fingerprint"
-			if @state == :in_service
-				@host["endpoints"].last.merge!(attributes)
-			end
-		when "test"
-			if attributes["status"] == "vulnerable-exploited" or attributes["status"] == "vulnerable-version"
-				@host["vulns"][attributes["id"]] = attributes.dup
-			end
-		when "vulnerability"
-			@vuln.merge! attributes
-		when "reference"
-			@state = :in_reference
-			@vuln["refs"].push attributes
-		end
-	end
-
-	def text(str)
-		case @state
-		when :in_name
-			@host["names"].push str
-		when :in_reference
-			@vuln["refs"].last["value"] = str
+			@host["ports"].last.merge!(attributes)
 		end
 	end
 
 	def tag_end(name)
 		case name
-		when "node"
-			callback.call(:host, @host) if callback
+		when "host"
+			on_found_host.call(@host) if on_found_host
 			reset_state
-		when "vulnerability"
-			callback.call(:vuln, @vuln) if callback
-			reset_state
-		when "service","reference"
-			@state = :generic_state
 		end
 	end
 
 	# We don't need these methods, but they're necessary to keep REXML happy
+	def text(str); end
 	def xmldecl(version, encoding, standalone); end
 	def cdata; end
 	def comment(str); end
 	def instruction(name, instruction); end
 	def attlist; end
 end
+
 end
 end
-
-__END__
-
-
 
