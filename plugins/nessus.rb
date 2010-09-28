@@ -1,5 +1,6 @@
 
 require 'nessus/nessus-xmlrpc'
+require 'rex/parser/nessus_xml'
 
 module Msf
 
@@ -53,6 +54,7 @@ module Msf
 					"nessus_policy_list" => "List all polciies",
 					#"nessus_policy_new" => "Save new policy"
 					"nessus_policy_del" => "Delete a policy",
+					"nessus_stream" => "testing a stream parser",
 					#"nessus_policy_dupe" => "Duplicate a policy"
 					#"nessus_policy_rename" => "Rename a policy"
 					"nessus_find_targets" => "Try to find vulnerable targets from a report"
@@ -61,6 +63,10 @@ module Msf
 					#"nessus_report_upload" => "Upload nessusv2 report"
 				
 				}
+			end
+			
+			def cmd_nessus_stream
+				parser = Rex::Parser::NssusXMLStreamParser.new
 			end
 		
 			def cmd_nessus_logout
@@ -409,6 +415,25 @@ module Msf
 				print_status("You can:")
 				print_status("        Get a list of hosts from the report:          nessus_report_hosts <report id>")
 			end
+			
+			def check_scan(*args)
+				
+				case args.length
+				when 1
+					rid = args[0]
+				else
+					print_error("No Report ID Supplied")
+					return
+				end
+				
+				scans = @n.scan_list_hash
+				scans.each {|scan|
+					if scan['id'] == rid
+						return true
+					end
+				}
+				return false
+			end
 		
 			def cmd_nessus_report_get(*args)
 			
@@ -449,7 +474,12 @@ module Msf
 					print_status("       use nessus_report_list to list all available reports for importing")
 					return
 				end
-			
+				
+				if check_scan(rid)
+					print_error("That scan is still running.")
+					return
+				end
+				
 				content=@n.report_file_download(rid)
 				print_status("importing " + rid)
 				framework.db.import({:data => content})

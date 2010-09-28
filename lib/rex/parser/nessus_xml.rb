@@ -38,7 +38,7 @@ module Parser
 # xml will trip it up.  Nmap shouldn't ever output malformed xml, so it's not
 # a big deal.
 #
-class NmapXMLStreamParser
+class NessusXMLStreamParser
 
 	attr_accessor :on_found_host
 
