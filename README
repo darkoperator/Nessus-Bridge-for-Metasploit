@@ -7,9 +7,18 @@ Concists of:
 
 plugins/nessus.rb
 lib/nessus/nessus-xmlrpc.rb
-
-** Warning **
-ignore the following files, do not copy them to your local install, you will probably break it.
-
 lib/rex/parser/nessus_xml.rb
+lib/msf/core/db.rb
+
+Download the files (download link up to the right there)
+Unpack them.
+Over write each of the above in your msf install.
+Test.
+Report bugs.
+
+To get back to the normal msf install, delete each of the above listed files from your msf install and then run "svn update" to repull then from the msf svn repo.
+
+Enjoy.
+
+Zate.
 
