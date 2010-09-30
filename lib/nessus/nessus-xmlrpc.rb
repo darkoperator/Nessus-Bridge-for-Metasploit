@@ -34,6 +34,8 @@
 require 'uri'
 require 'net/https'
 require 'rexml/document'
+require "rexml/streamlistener"
+include REXML
 
 # NessusXMLRPC module
 # 
@@ -680,6 +682,16 @@ module NessusXMLRPC
 			return prefs
 		end
 	end # end of NessusXMLRPC::Class
+	
+	class NessusXMLStream
+		include StreamListener
+
+		def tag_start(element, attributes)
+			if element == 'ReportHost'
+				puts("Host!")
+			end
+		end
+	end
 
 end # of Module
 

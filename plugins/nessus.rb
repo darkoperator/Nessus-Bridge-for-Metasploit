@@ -1,6 +1,7 @@
 
 require 'nessus/nessus-xmlrpc'
 require 'rex/parser/nessus_xml'
+require 'rex/socket'
 
 module Msf
 
@@ -54,7 +55,7 @@ module Msf
 					"nessus_policy_list" => "List all polciies",
 					#"nessus_policy_new" => "Save new policy"
 					"nessus_policy_del" => "Delete a policy",
-					"nessus_stream" => "testing a stream parser",
+					"nessus_report_stream" => "testing a stream parser",
 					#"nessus_policy_dupe" => "Duplicate a policy"
 					#"nessus_policy_rename" => "Rename a policy"
 					"nessus_find_targets" => "Try to find vulnerable targets from a report"
@@ -65,8 +66,86 @@ module Msf
 				}
 			end
 			
-			def cmd_nessus_stream
-				parser = Rex::Parser::NssusXMLStreamParser.new
+			def nessus_stream(data)
+				wspace = framework.db.workspace
+				#@host = {
+				#'hname'             => nil,
+				#'addr'              => nil,
+				#'mac'               => nil,
+				#'os'                => nil,
+				#'ports'             => [ 'port' => {    'port'              	=> nil,
+				#					'svc_name'              => nil,
+				#					'proto'              	=> nil,
+				#					'severity'              => nil,
+				#					'nasl'              	=> nil,
+				#					'description'           => nil,
+				#					'cve'                   => [],
+				#					'bid'                   => [],
+				#					'xref'                  => []
+				#				}
+				#			]
+				#}
+				parser = Rex::Parser::NessusXMLStreamParser.new
+				parser.on_found_host = Proc.new { |host|
+					
+					
+					addr = host['addr']
+					
+					#next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
+					#
+					#if bl.include? addr
+					#	next
+					#else
+					#	yield(:address,addr) if block
+					#end
+		
+					os = host['os']
+					if os
+						framework.db.report_note(
+							:workspace => wspace,
+							:host => addr,
+							:type => 'host.os.nessus_fingerprint',
+							:data => {
+								:os => os.to_s.strip
+							}
+						)
+					end
+		
+					hname = host['hname']
+					if hname
+						framework.db.report_host(
+							:workspace => wspace,
+							:host => addr,
+							:name => hname.to_s.strip
+						)
+					end
+		
+					mac = host['mac']
+					if mac
+						framework.db.report_host(
+							:workspace => wspace,
+							:host => addr,
+							:mac  => mac.to_s.strip.upcase
+						)
+					end
+		
+					host['ports'].each do |item|
+						nasl = item['nasl']
+						port = item['port']
+						proto = item['protocol']
+						name = item['svc_name']
+						severity = item['severity']
+						description = item['description']
+						cve = item['cve']
+						bid = item['bid']
+						xref = item['xref']
+		
+						framework.db.handle_nessus_v2(wspace, addr, port, proto, name, nasl, severity, description, cve, bid, xref)
+		
+					end
+						}
+				
+				REXML::Document.parse_stream(data, parser)
 			end
 		
 			def cmd_nessus_logout
@@ -483,6 +562,57 @@ module Msf
 				content=@n.report_file_download(rid)
 				print_status("importing " + rid)
 				framework.db.import({:data => content})
+			
+			end
+			
+			def cmd_nessus_report_stream(*args)
+			
+				if args[0] == "-h"
+					print_status("Usage: ")
+					print_status("       nessus_report_get <report id>")
+					print_status(" Example:> nessus_report_get f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+					print_status()
+					print_status("This command pulls the provided report from the nessus server in the nessusv2 format")
+					print_status("and parses it the same way db_import_nessus does.  After it is parsed it will be")
+					print_status("available to commands such as db_hosts, db_vulns, db_services and db_autopwn.")
+					print_status("Use: nessus_report_list to obtain a list of report id's")
+				end
+			
+				if ! nessus_verify_token
+					return
+				end
+			
+				if ! nessus_verify_db
+					return
+				end
+			
+				if(args.length == 0 or args[0].empty? or args[0] == "-h")
+					print_status("Usage: ")
+					print_status("       nessus_report_get <report id> ")
+					print_status("       use nessus_report_list to list all available reports for importing")
+					return
+				end
+			
+				rid = nil
+			
+				case args.length
+				when 1
+					rid = args[0]
+				else
+					print_status("Usage: ")
+					print_status("       nessus_report_get <report id> ")
+					print_status("       use nessus_report_list to list all available reports for importing")
+					return
+				end
+				
+				if check_scan(rid)
+					print_error("That scan is still running.")
+					return
+				end
+				
+				content=@n.report_file_download(rid)
+				print_status("importing " + rid)
+				nessus_stream(content)
 			
 			end
 		
