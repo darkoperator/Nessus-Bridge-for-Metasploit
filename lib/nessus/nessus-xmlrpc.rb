@@ -555,7 +555,11 @@ module NessusXMLRPC
 		#returns a list of users, if they are an admin and their last login time.
 		def users_list
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('users/list', post)
+			if docxml.nil?
+				return
+			end
 			users=Array.new
 			docxml.root.elements['contents'].elements['users'].each_element('//user') { |user|
 				entry=Hash.new

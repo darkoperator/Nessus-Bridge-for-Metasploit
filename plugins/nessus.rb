@@ -808,7 +808,8 @@ module Msf
 				
 				pol = @n.policy_list_hash
 				pol.each {|p|
-					if p['id'] == pid
+					#puts("#{pid} and #{p['id']}")
+					if p['id'].to_i == pid
 						return false
 					end
 				}

@@ -50,8 +50,9 @@ class NessusXMLStreamParser
 				@state = :is_os
 			end
 		when "ReportHost"
+			print "."
 			@host['hname'] = attributes['name']
-			puts(@host['hname'])
+			
 		#when "HostProperties"
 			
 		when "ReportItem"
