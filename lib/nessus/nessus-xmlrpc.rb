@@ -107,6 +107,7 @@ module NessusXMLRPC
 				status = docxml.root.elements['status'].text
 			rescue
 				puts("Error connecting/logging to the server!")
+				return
 			end
 			if status == "OK"
 				return docxml
@@ -576,6 +577,7 @@ module NessusXMLRPC
 		# returns basic data about the feed type and versions.
 		def feed
 			post = { "token" => @token }
+			docxml = nil
 			docxml = nessus_request('feed', post)
 			feed = docxml.root.elements['contents'].elements['feed'].text
 			version = docxml.root.elements['contents'].elements['server_version'].text
