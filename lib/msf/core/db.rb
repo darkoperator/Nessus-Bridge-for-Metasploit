@@ -2695,7 +2695,6 @@ class DBManager
 			end
 	
 			host['ports'].each do |item|
-				cve, bid, xref = nil
 				nasl = item['nasl'].to_s
 				port = item['port'].to_s
 				proto = item['proto'] || "tcp"
