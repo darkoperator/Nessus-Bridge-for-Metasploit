@@ -2554,7 +2554,7 @@ class DBManager
 			end
 		end
 	end
-
+	#XXX Left this here just incase we need to swap back.
 	#def import_nessus_xml_v2(args={}, &block)
 	#	data = args[:data]
 	#	wspace = args[:wspace] || workspace
@@ -2629,7 +2629,7 @@ class DBManager
 		data = args[:data]
 		wspace = args[:wspace] || workspace
 		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
-
+		
 		#@host = {
 				#'hname'             => nil,
 				#'addr'              => nil,
@@ -2650,8 +2650,7 @@ class DBManager
 		parser = Rex::Parser::NessusXMLStreamParser.new
 		parser.on_found_host = Proc.new { |host|
 			
-			
-			addr = host['addr']
+			addr = host['addr'] || host['hname']
 			
 			next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
 			
@@ -2660,9 +2659,10 @@ class DBManager
 			else
 				yield(:address,addr) if block
 			end
-			puts(addr)
-
+			
+	
 			os = host['os']
+			
 			if os
 				report_note(
 					:workspace => wspace,
@@ -2672,47 +2672,52 @@ class DBManager
 						:os => os.to_s.strip
 					}
 				)
-				puts(os)
 			end
-
+	
 			hname = host['hname']
+			
 			if hname
 				report_host(
 					:workspace => wspace,
 					:host => addr,
 					:name => hname.to_s.strip
 				)
-				puts(hname)
 			end
-
+	
 			mac = host['mac']
+			
 			if mac
 				report_host(
 					:workspace => wspace,
 					:host => addr,
 					:mac  => mac.to_s.strip.upcase
 				)
-				puts(mac)
 			end
-
+	
 			host['ports'].each do |item|
-				nasl = item['nasl']
-				port = item['port']
-				proto = item['protocol']
+				cve, bid, xref = nil
+				nasl = item['nasl'].to_s
+				port = item['port'].to_s
+				proto = item['proto'] || "tcp"
 				name = item['svc_name']
 				severity = item['severity']
 				description = item['description']
-				cve = item['cve']
+				cve = item['cve'] 
 				bid = item['bid']
 				xref = item['xref']
-
-				handle_nessus_v2(wspace, addr, port, proto, name, nasl, severity, description, cve, bid, xref)
-
+				
+				yield(:port,port) if block
+				
+				handle_nessus_v2(wspace, addr, port, proto, hname, nasl, severity, description, cve, bid, xref)
+	
 			end
-				}
+			yield(:end,hname) if block
+		}
 		
 		REXML::Document.parse_stream(data, parser)
+		
 	end
+
 
 	#
 	# Import Qualys' xml output
@@ -3042,7 +3047,7 @@ protected
 			:workspace => wspace,
 			:host => addr,
 			:name => nss,
-			:info => description ? description.text : "",
+			:info => description ? description : "",
 			:refs => refs
 		}
 

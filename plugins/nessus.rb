@@ -55,7 +55,6 @@ module Msf
 					"nessus_policy_list" => "List all polciies",
 					#"nessus_policy_new" => "Save new policy"
 					"nessus_policy_del" => "Delete a policy",
-					"nessus_report_stream" => "testing a stream parser",
 					#"nessus_policy_dupe" => "Duplicate a policy"
 					#"nessus_policy_rename" => "Rename a policy"
 					"nessus_find_targets" => "Try to find vulnerable targets from a report"
@@ -64,88 +63,6 @@ module Msf
 					#"nessus_report_upload" => "Upload nessusv2 report"
 				
 				}
-			end
-			
-			def nessus_stream(data)
-				wspace = framework.db.workspace
-				#@host = {
-				#'hname'             => nil,
-				#'addr'              => nil,
-				#'mac'               => nil,
-				#'os'                => nil,
-				#'ports'             => [ 'port' => {    'port'              	=> nil,
-				#					'svc_name'              => nil,
-				#					'proto'              	=> nil,
-				#					'severity'              => nil,
-				#					'nasl'              	=> nil,
-				#					'description'           => nil,
-				#					'cve'                   => [],
-				#					'bid'                   => [],
-				#					'xref'                  => []
-				#				}
-				#			]
-				#}
-				parser = Rex::Parser::NessusXMLStreamParser.new
-				parser.on_found_host = Proc.new { |host|
-					
-					
-					addr = host['addr']
-					
-					#next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
-					#
-					#if bl.include? addr
-					#	next
-					#else
-					#	yield(:address,addr) if block
-					#end
-		
-					os = host['os']
-					if os
-						framework.db.report_note(
-							:workspace => wspace,
-							:host => addr,
-							:type => 'host.os.nessus_fingerprint',
-							:data => {
-								:os => os.to_s.strip
-							}
-						)
-					end
-		
-					hname = host['hname']
-					if hname
-						framework.db.report_host(
-							:workspace => wspace,
-							:host => addr,
-							:name => hname.to_s.strip
-						)
-					end
-		
-					mac = host['mac']
-					if mac
-						framework.db.report_host(
-							:workspace => wspace,
-							:host => addr,
-							:mac  => mac.to_s.strip.upcase
-						)
-					end
-		
-					host['ports'].each do |item|
-						nasl = item['nasl']
-						port = item['port']
-						proto = item['protocol']
-						name = item['svc_name']
-						severity = item['severity']
-						description = item['description']
-						cve = item['cve']
-						bid = item['bid']
-						xref = item['xref']
-		
-						framework.db.handle_nessus_v2(wspace, addr, port, proto, name, nasl, severity, description, cve, bid, xref)
-		
-					end
-						}
-				
-				REXML::Document.parse_stream(data, parser)
 			end
 		
 			def cmd_nessus_logout
@@ -561,7 +478,20 @@ module Msf
 				
 				content=@n.report_file_download(rid)
 				print_status("importing " + rid)
-				framework.db.import({:data => content})
+				framework.db.import({:data => content}) do |type,data|
+                    case type
+						when :address
+							print("%bld%blu[*]%clr %bld#{data} %bld%red[")
+							$stdout.flush
+						when :port
+							print("%bld%grn#")
+							$stdout.flush
+						when :end
+							print("%bld%red]%clr\n")
+							$stdout.flush
+                    end
+				end
+				print_good("Done")
 			
 			end
 			
@@ -1725,8 +1655,6 @@ end
 #  show_exploits(regex, rank)
 
 # parse cvss_temporal_score and look at attack vectors etc.
-
-# convert to using Streaming xml parsing.  Nmap XL Parser has the code we need to borrow from.
 
 # add ability to save report in nbe/nessusv1/html format.  posibbly all at once.
 

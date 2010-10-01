@@ -14,23 +14,9 @@ class NessusXMLStreamParser
 	end
 
 	def reset_state
-		@host = {
-				'hname'             => nil,
-				'addr'              => nil,
-				'mac'               => nil,
-				'os'                => nil,
-				'ports'             => [ 'port' => {    'port'              	=> nil,
-									'svc_name'              => nil,
-									'proto'              	=> nil,
-									'severity'              => nil,
-									'nasl'              	=> nil,
-									'description'           => nil,
-									'cve'                   => [],
-									'bid'                   => [],
-									'xref'                  => []
-								}
-							]
-		}
+		@host = {'hname' => nil, 'addr' => nil, 'mac' => nil, 'os' => nil, 'ports' => [
+			'port' => {'port' => nil, 'svc_name'  => nil, 'proto' => nil, 'severity' => nil,
+			'nasl' => nil, 'description' => nil, 'cve' => [], 'bid' => [], 'xref' => []	} ] }
 		@state = :generic_state
 	end
 
@@ -50,11 +36,7 @@ class NessusXMLStreamParser
 				@state = :is_os
 			end
 		when "ReportHost"
-			print "."
 			@host['hname'] = attributes['name']
-			
-		#when "HostProperties"
-			
 		when "ReportItem"
 			@x = Hash.new
 			@x['nasl'] = attributes['pluginID']
@@ -62,19 +44,14 @@ class NessusXMLStreamParser
 			@x['proto'] = attributes['protocol']
 			@x['svc_name'] = attributes['svc_name']
 			@x['severity'] = attributes['severity']
-			
 		when "description"
 			@state = :is_desc
-			#description = elements['plugin_output']
 		when "cve"
 			@state = :is_cve
-			#cve = item.elements['cve']
 		when "bid"
 			@state = :is_bid
-			#bid = item.elements['bid']
 		when "xref"
 			@state = :is_xref
-			#xref = item.elements['xref']
 		when "solution"
 			@state = :is_solution
 		end
@@ -123,62 +100,4 @@ end
 
 end
 end
-
-#begin
-#				addr = host.elements["HostProperties/tag[@name='host-ip']"].text
-#			rescue
-#				addr = host.attribute("name").value
-#			end
-#
-#			next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
-#			if bl.include? addr
-#				next
-#			else
-#				yield(:address,addr) if block
-#			end
-#
-#			os = host.elements["HostProperties/tag[@name='operating-system']"]
-#			if os
-#				report_note(
-#					:workspace => wspace,
-#					:host => addr,
-#					:type => 'host.os.nessus_fingerprint',
-#					:data => {
-#						:os => os.text.to_s.strip
-#					}
-#				)
-#			end
-#
-#			hname = host.elements["HostProperties/tag[@name='host-fqdn']"]
-#			if hname
-#				report_host(
-#					:workspace => wspace,
-#					:host => addr,
-#					:name => hname.text.to_s.strip
-#				)
-#			end
-#
-#			mac = host.elements["HostProperties/tag[@name='mac-address']"]
-#			if mac
-#				report_host(
-#					:workspace => wspace,
-#					:host => addr,
-#					:mac  => mac.text.to_s.strip.upcase
-#				)
-#			end
-#
-#			host.elements.each('ReportItem') do |item|
-#				nasl = item.attribute('pluginID').value
-#				port = item.attribute('port').value
-#				proto = item.attribute('protocol').value
-#				name = item.attribute('svc_name').value
-#				severity = item.attribute('severity').value
-#				description = item.elements['plugin_output']
-#				cve = item.elements['cve']
-#				bid = item.elements['bid']
-#				xref = item.elements['xref']
-#
-#				handle_nessus_v2(wspace, addr, port, proto, name, nasl, severity, description, cve, bid, xref)
-#
-#			end
 
