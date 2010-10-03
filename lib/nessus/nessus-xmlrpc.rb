@@ -191,7 +191,11 @@ module NessusXMLRPC
 		# returns: array of uids of active scans
 		def scan_list_uids
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('scan/list', post)
+			if docxml.nil?
+				return
+			end
 			uuids=Array.new
 			docxml.root.elements['contents'].elements['scans'].elements['scanList'].each_element('//scan') {|scan| uuids.push(scan.elements['uuid'].text) }
 			return uuids
@@ -202,7 +206,11 @@ module NessusXMLRPC
 		# returns: array of hash of active scans
 		def scan_list_hash
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('scan/list', post)
+			if docxml.nil?
+				return
+			end
 			scans=Array.new
 			docxml.root.elements['contents'].elements['scans'].elements['scanList'].each_element('//scan') {|scan|
 				entry=Hash.new
@@ -223,7 +231,11 @@ module NessusXMLRPC
 		# returns: array of hash of policies
 		def policy_list_hash
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('policy/list', post)
+			if docxml.nil?
+				return
+			end
 			policies=Array.new
 			docxml.elements.each('/reply/contents/policies/policy') { |policy|
 				entry=Hash.new
@@ -241,7 +253,11 @@ module NessusXMLRPC
 		# returns: array of hash of templates
 		def template_list_hash
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('scan/list', post)
+			if docxml.nil?
+				return
+			end
 			scans=Array.new
 			docxml.root.elements['contents'].elements['scans'].elements['scanList'].each_element('//scan') {|scan|
 				entry=Hash.new
@@ -259,7 +275,11 @@ module NessusXMLRPC
 		# returns: array of hash of templates
 		def report_list_hash
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('report/list', post)
+			if docxml.nil?
+				return
+			end
 			#puts docxml
 			reports=Array.new
 			docxml.root.elements['contents'].elements['reports'].each_element('//report') {|report|
@@ -278,7 +298,11 @@ module NessusXMLRPC
 		# returns: policyID
 		def policy_get_id(textname)
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('policy/list', post)
+			if docxml.nil?
+				return
+			end
 			docxml.root.elements['contents'].elements['policies'].each_element('//policy') {|policy|
 				if policy.elements['policyName'].text == textname
 					return policy.elements['policyID'].text
@@ -292,7 +316,11 @@ module NessusXMLRPC
 		# returns: policyID, policyName
 		def policy_get_first
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('policy/list', post)
+			if docxml.nil?
+				return
+			end
 			docxml.root.elements['contents'].elements['policies'].each_element('//policy') {|policy|
 				return policy.elements['policyID'].text, policy.elements['policyName'].text
 			}
@@ -303,7 +331,11 @@ module NessusXMLRPC
 		# returns: array of all policy uids
 		def policy_list_uids
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('policy/list', post)
+			if docxml.nil?
+				return
+			end
 			pids=Array.new
 			docxml.root.elements['contents'].elements['policies'].each_element('//policy') { |policy|
 				pids.push(policy.elements['policyID'].text) }
@@ -313,7 +345,11 @@ module NessusXMLRPC
 		# stop scan identified by scan_uuid
 		def scan_stop(uuid)
 			post= { "token" => @token, "scan_uuid" => uuid }
+			docxml = nil
 			docxml=nessus_request('scan/stop', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
@@ -336,7 +372,11 @@ module NessusXMLRPC
 		# pause scan identified by scan_uuid
 		def scan_pause(uuid)
 			post= { "token" => @token, "scan_uuid" => uuid }
+			docxml = nil
 			docxml=nessus_request('scan/pause', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
@@ -359,7 +399,11 @@ module NessusXMLRPC
 		# remove scan identified by uuid
 		def scan_resume(uuid)
 			post= { "token" => @token, "scan_uuid" => uuid }
+			docxml = nil
 			docxml=nessus_request('scan/resume', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 		# resume all active scans
@@ -381,7 +425,11 @@ module NessusXMLRPC
 		# check status of scan identified by uuid
 		def scan_status(uuid)
 			post= { "token" => @token, "report" => uuid }
+			docxml = nil
 			docxml=nessus_request('report/list', post)
+			if docxml.nil?
+				return
+			end
 			docxml.root.elements['contents'].elements['reports'].each_element('//report') { |report|
 				if report.elements['name'].text == uuid
 					return (report.elements['status'].text)
@@ -405,7 +453,9 @@ module NessusXMLRPC
 		# returns: XML file of report (nessus v2 format)
 		def report_file_download(report)
 			post= { "token" => @token, "report" => report }
+			
 			file=nessus_http_request('file/report/download', post)
+			
 			return file
 		end
 
@@ -414,14 +464,20 @@ module NessusXMLRPC
 		# returns: XML file of report (nessus v1 format)
 		def report_file1_download(report)
 			post= { "token" => @token, "report" => report, "v1" => "true" }
+			
 			file=nessus_http_request('file/report/download', post)
+			
 			return file
 		end
 	
 		# delete report by report ID
 		def report_delete(id)
 			post= { "token" => @token, "report" => id }
+			docxml = nil
 			docxml=nessus_request('report/delete', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 
@@ -430,7 +486,11 @@ module NessusXMLRPC
 		# returns: array of names
 		def policy_list_names
 			post= { "token" => @token }
+			docxml = nil
 			docxml=nessus_request('policy/list', post)
+			if docxml.nil?
+				return
+			end
 			list = Array.new
 			docxml.root.elements['contents'].elements['policies'].each_element('//policy') {|policy|
 				list.push policy.elements['policyName'].text
@@ -452,7 +512,11 @@ module NessusXMLRPC
 		#		scanprogressTotal
 		def report_hosts(report_id)
 			post= { "token" => @token, "report" => report_id }
+			docxml = nil
 			docxml=nessus_request('report/hosts', post)
+			if docxml.nil?
+				return
+			end
 			hosts=Array.new
 			docxml.elements.each('/reply/contents/hostList/host') do |host|
 				entry=Hash.new
@@ -475,7 +539,11 @@ module NessusXMLRPC
 	
 		def report_host_ports(report_id,host)
 			post= { "token" => @token, "report" => report_id, "hostname" => host }
+			docxml = nil
 			docxml=nessus_request('report/ports', post)
+			if docxml.nil?
+				return
+			end
 			ports=Array.new
 			docxml.elements.each('/reply/contents/portList/port') do |port|
 				entry=Hash.new
@@ -498,26 +566,42 @@ module NessusXMLRPC
 	
 		def report_host_port_details(report_id,host,port,protocol)
 			post= { "token" => @token, "report" => report_id, "hostname" => host, "port" => port, "protocol" => protocol }
+			docxml = nil
 			docxml=nessus_request('report/details', post)
+			if docxml.nil?
+				return
+			end
 			reportitems=Array.new
 			docxml.elements.each('/reply/contents/portDetails/ReportItem') do |rpt|
 				entry=Hash.new
+				cve = Array.new
+				bid = Array.new
 				entry['port'] = rpt.elements['port'].text if rpt.elements['port']
 				entry['severity'] = rpt.elements['severity'].text if rpt.elements['severity']
 				entry['pluginID'] = rpt.elements['pluginID'].text if rpt.elements['pluginID']
 				entry['pluginName'] = rpt.elements['pluginName'].text if rpt.elements['pluginName']
 				entry['cvss_base_score'] = rpt.elements['data'].elements['cvss_base_score'].text if rpt.elements['data'].elements['cvss_base_score']
 				entry['exploit_available'] = rpt.elements['data'].elements['exploit_available'].text if rpt.elements['data'].elements['exploit_available']
-				entry['cve'] = rpt.elements['data'].elements['cve'].text if rpt.elements['data'].elements['cve']
+				if rpt.elements['data'].elements['cve']
+					rpt.elements['data'].elements['cve'].each do |x|
+						cve.push rpt.elements['data'].elements['cve'].text
+					end
+				end
+				entry['cve'] = cve if cve
 				entry['risk_factor'] = rpt.elements['data'].elements['risk_factor'].text if rpt.elements['data'].elements['risk_factor']
 				entry['cvss_vector'] = rpt.elements['data'].elements['cvss_vector'].text if rpt.elements['data'].elements['cvss_vector']
-				#entry['solution'] = rpt.elements['data/solution'].text #not important right now
-				#entry['description'] = rpt.elements['data/description'].text #not important right now
-				#entry['synopsis'] = rpt.elements['data/synopsis'].text #not important right now
-				#entry['see_also'] = rpt.elements['data/see_also'].text # multiple of these
-				#entry['bid'] = rpt.elements['data/bid'].text multiple of these
-				#entry['xref'] = rpt.elements['data/xref'].text # multiple of these
-				#entry['plugin_output'] = rpt.elements['data/plugin_output'].text #not important right now
+				entry['solution'] = rpt.elements['data'].elements['solution'].text if rpt.elements['data'].elements['solution']
+				entry['description'] = rpt.elements['data'].elements['description'].text if rpt.elements['data'].elements['description']
+				entry['synopsis'] = rpt.elements['data'].elements['synopsis'].text if rpt.elements['data'].elements['synopsis']
+				entry['see_also'] = rpt.elements['data'].elements['see_also'].text if rpt.elements['data'].elements['see_also']
+				if rpt.elements['data'].elements['bid']
+					rpt.elements['data'].elements['bid'].each do |y|
+						bid.push rpt.elements['data'].elements['bid'].text
+					end
+				end
+				entry['bid'] = bid if bid
+				#entry['xref'] = rpt.elements['data'].elements['xref'].text # multiple of these
+				entry['plugin_output'] = rpt.elements['data'].elements['plugin_output'].text if rpt.elements['data'].elements['plugin_output']
 				reportitems.push(entry)
 			end
 			return reportitems
@@ -528,7 +612,11 @@ module NessusXMLRPC
 		# returns: severity, current, total
 		def report_get_host(report_id,host)
 			post= { "token" => @token, "report" => report_id }
+			docxml = nil
 			docxml=nessus_request('report/hosts', post)
+			if docxml.nil?
+				return
+			end
 			docxml.root.elements['contents'].elements['hostList'].each_element('//host') { |host|
 				if host.elements['hostname'].text == host
 					severity = host.elements['severity'].text
@@ -542,7 +630,11 @@ module NessusXMLRPC
 		# gets a list of each plugin family and the number of plugins for that family.
 		def plugins_list
 			post= { "token" => @token }
+			docxml =  nil
 			docxml=nessus_request('plugins/list', post)
+			if docxml.nil?
+				return
+			end
 			plugins=Array.new
 			docxml.root.elements['contents'].elements['pluginFamilyList'].each_element('//family') { |plugin|
 				entry=Hash.new
@@ -579,6 +671,9 @@ module NessusXMLRPC
 			post = { "token" => @token }
 			docxml = nil
 			docxml = nessus_request('feed', post)
+			if docxml.nil?
+				return
+			end
 			feed = docxml.root.elements['contents'].elements['feed'].text
 			version = docxml.root.elements['contents'].elements['server_version'].text
 			web_version = docxml.root.elements['contents'].elements['web_server_version'].text
@@ -587,25 +682,41 @@ module NessusXMLRPC
 	
 		def user_add(user,pass)
 			post= { "token" => @token, "login" => user, "password" => pass }
+			docxml = nil
 			docxml = nessus_request('users/add', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
 		def user_del(user)
 			post= { "token" => @token, "login" => user }
+			docxml = nil
 			docxml = nessus_request('users/delete', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
 		def user_pass(user,pass)
 			post= { "token" => @token, "login" => user, "password" => pass }
+			docxml = nil
 			docxml = nessus_request('users/chpasswd', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
 		def plugin_family(fam)
 			post = { "token" => @token, "family" => fam }
+			docxml = nil
 			docxml = nessus_request('plugins/list/family', post)
+			if docxml.nil?
+				return
+			end
 			family=Array.new
 			docxml.elements.each('/reply/contents/pluginList/plugin') { |plugin|
 				entry=Hash.new
@@ -619,19 +730,31 @@ module NessusXMLRPC
 	
 		def policy_del(pid)
 			post= { "token" => @token, "policy_id" => pid }
+			docxml = nil
 			docxml = nessus_request('policy/delete', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
 		def report_del(rid)
 			post= { "token" => @token, "report" => rid }
+			docxml = nil
 			docxml = nessus_request('report/delete', post)
+			if docxml.nil?
+				return
+			end
 			return docxml
 		end
 	
 		def plugin_detail(pname)
 			post = { "token" => @token, "fname" => pname }
+			docxml = nil
 			docxml = nessus_request('plugins/description', post)
+			if docxml.nil?
+				return
+			end
 			#return docxml
 			#details=Array.new
 			entry=Hash.new
@@ -661,7 +784,11 @@ module NessusXMLRPC
 	
 		def server_prefs
 			post= { "token" => @token }
+			docxml = nil
 			docxml = nessus_request('preferences/list', post)
+			if docxml.nil?
+				return
+			end
 			prefs = Array.new
 			docxml.elements.each('/reply/contents/ServerPreferences/preference') { |pref|
 				entry=Hash.new
@@ -674,7 +801,11 @@ module NessusXMLRPC
 	
 		def plugin_prefs
 			post= { "token" => @token }
+			docxml = nil
 			docxml = nessus_request('plugins/preferences', post)
+			if docxml.nil?
+				return
+			end
 			prefs = Array.new
 			docxml.elements.each('/reply/contents/PluginsPreferences/item') { |pref|
 				entry=Hash.new
@@ -688,16 +819,6 @@ module NessusXMLRPC
 			return prefs
 		end
 	end # end of NessusXMLRPC::Class
-	
-	class NessusXMLStream
-		include StreamListener
-
-		def tag_start(element, attributes)
-			if element == 'ReportHost'
-				puts("Host!")
-			end
-		end
-	end
 
 end # of Module
 

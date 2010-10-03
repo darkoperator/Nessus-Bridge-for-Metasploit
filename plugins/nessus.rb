@@ -55,6 +55,10 @@ module Msf
 					"nessus_policy_list" => "List all polciies",
 					#"nessus_policy_new" => "Save new policy"
 					"nessus_policy_del" => "Delete a policy",
+					"nessus_exploits" => "stuff",
+					"nessus_exploits2" => "stuff2",
+					"nessus_test1" => "stuff",
+					"nessus_test2" => "stuff",
 					#"nessus_policy_dupe" => "Duplicate a policy"
 					#"nessus_policy_rename" => "Rename a policy"
 					"nessus_find_targets" => "Try to find vulnerable targets from a report"
@@ -63,6 +67,102 @@ module Msf
 					#"nessus_report_upload" => "Upload nessusv2 report"
 				
 				}
+			end
+			
+			def cmd_nessus_exploits2
+				start = Time.now
+				@xindex = Array.new
+				
+				
+				framework.exploits.sort.each { |refname, mod|
+					stuff = ""
+					o = nil
+					begin
+						o = mod.new
+					rescue ::Exception
+					end
+					stuff << "#{o.name}|#{refname}|#{o.platform_to_s}|#{o.arch_to_s}"
+					next if not o
+					o.references.map do |x|
+						if !(x.ctx_id == "URL")
+							if (x.ctx_id == "MSB")
+								stuff << "|#{x.ctx_val}"
+							else
+								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
+							end
+						end
+					end
+					stuff << "\n"
+					
+					@xindex.push stuff
+				}
+				total = Time.now - start
+				print_status(total)
+
+			end
+			
+			def cmd_nessus_exploits
+				#start = Time.now
+				File.open("xindex", "w+") do |f|
+				framework.exploits.sort.each { |refname, mod|
+					stuff = ""
+					o = nil
+					begin
+						o = mod.new
+					rescue ::Exception
+					end
+					stuff << "#{refname}|#{o.platform_to_s}|#{o.arch_to_s}"
+					next if not o
+					o.references.map do |x|
+						if !(x.ctx_id == "URL")
+							if (x.ctx_id == "MSB")
+								stuff << "|#{x.ctx_val}"
+							else
+								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
+							end
+						end
+					end
+					stuff << "\n"
+					f.puts(stuff)
+				}
+				end
+				#total = Time.now - start
+				#print_status(total)
+			end
+			
+			def cmd_nessus_test1
+				start = Time.now
+				match = "MS04-045"
+				match = '.*' if match.nil?
+				regex = Regexp.new(match, true, 'n')
+				File.open("xindex", "r") do |m|
+					while line = m.gets  
+						if (line.match(regex))
+							print("#{line}")
+						end 
+					end  
+				end
+				#show_exploits(regex)
+				print("\n")
+				total = Time.now - start
+				print_status(total)
+			end
+			
+			def cmd_nessus_test2
+				start = Time.now
+				match = "MS04-045"
+				match = '.*' if match.nil?
+				regex = Regexp.new(match, true, 'n')
+				@xindex.each do |m|
+					
+					if (m.match(regex))
+						print("#{m}%")
+					end
+				end
+				#show_exploits(regex)
+				print("\n")
+				total = Time.now - start
+				print_status(total)
 			end
 		
 			def cmd_nessus_logout
@@ -478,6 +578,7 @@ module Msf
 				
 				content=@n.report_file_download(rid)
 				print_status("importing " + rid)
+				#puts(content.inspect)
 				framework.db.import({:data => content}) do |type,data|
                     case type
 						when :address
@@ -492,57 +593,6 @@ module Msf
                     end
 				end
 				print_good("Done")
-			
-			end
-			
-			def cmd_nessus_report_stream(*args)
-			
-				if args[0] == "-h"
-					print_status("Usage: ")
-					print_status("       nessus_report_get <report id>")
-					print_status(" Example:> nessus_report_get f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
-					print_status()
-					print_status("This command pulls the provided report from the nessus server in the nessusv2 format")
-					print_status("and parses it the same way db_import_nessus does.  After it is parsed it will be")
-					print_status("available to commands such as db_hosts, db_vulns, db_services and db_autopwn.")
-					print_status("Use: nessus_report_list to obtain a list of report id's")
-				end
-			
-				if ! nessus_verify_token
-					return
-				end
-			
-				if ! nessus_verify_db
-					return
-				end
-			
-				if(args.length == 0 or args[0].empty? or args[0] == "-h")
-					print_status("Usage: ")
-					print_status("       nessus_report_get <report id> ")
-					print_status("       use nessus_report_list to list all available reports for importing")
-					return
-				end
-			
-				rid = nil
-			
-				case args.length
-				when 1
-					rid = args[0]
-				else
-					print_status("Usage: ")
-					print_status("       nessus_report_get <report id> ")
-					print_status("       use nessus_report_list to list all available reports for importing")
-					return
-				end
-				
-				if check_scan(rid)
-					print_error("That scan is still running.")
-					return
-				end
-				
-				content=@n.report_file_download(rid)
-				print_status("importing " + rid)
-				nessus_stream(content)
 			
 			end
 		
@@ -1277,30 +1327,30 @@ module Msf
 			end
 		
 			def cmd_nessus_find_targets(*args)
-			
-				if args[0] == "-h"
-					print_status("Usage: ")
-					print_status("       nessus_find targets <report id>")
-					print_status(" Example:> nessus_find_targets f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
-					print_status()
-					print_status("Finds targets in a scan with CVSS2 > 7 and returns some info.")
-					print_status("%redThis plugin is experimental%clr")
-				end
-			
-				#given a report ID, find hosts that are the most vulnerable.  Try to match to metasploit exploits if we can.
-				if ! nessus_verify_token
-					return
-				end
-			
-				case args.length
-				when 1
-					rid = args[0]
-				else
-					print_status("Usage: ")
-					print_status("       nessus_find_targets <report id>")
-					print_status("       use nessus_report_list to list all available reports")
-					return
-				end
+				pwn = Array.new
+				#if args[0] == "-h"
+				#	print_status("Usage: ")
+				#	print_status("       nessus_find targets <report id>")
+				#	print_status(" Example:> nessus_find_targets f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
+				#	print_status()
+				#	print_status("Finds targets in a scan with CVSS2 > 7 and returns some info.")
+				#	print_status("%redThis plugin is experimental%clr")
+				#end
+				#
+				##given a report ID, find hosts that are the most vulnerable.  Try to match to metasploit exploits if we can.
+				#if ! nessus_verify_token
+				#	return
+				#end
+				#
+				#case args.length
+				#when 1
+				#	rid = args[0]
+				#else
+				#	print_status("Usage: ")
+				#	print_status("       nessus_find_targets <report id>")
+				#	print_status("       use nessus_report_list to list all available reports")
+				#	return
+				#end
 			
 				#tbl = Rex::Ui::Text::Table.new(
 				#	'Columns' =>
@@ -1314,30 +1364,105 @@ module Msf
 				#			'Current Progress',
 				#			'Total Progress'
 				#		])
-				print_error("This command is still in dev, right now it (maybe) just outputs vulns from a report that are > CVSS2 7.  It's slow.")
-				hosts=@n.report_hosts(rid)
-				hosts.each {|host|
-					#tbl << [ host['hostname'], host['severity'], host['sev0'], host['sev1'], host['sev2'], host['sev3'], host['current'], host['total'] ]
-					ports=@n.report_host_ports(rid, host['hostname'])
-					ports.each {|port|
-						#tbl << [ port['portnum'], port['protocol'], port['severity'], port['svcname'], port['sev0'], port['sev1'], port['sev2'], port['sev3'] ]
-						details=@n.report_host_port_details(rid, host['hostname'], port['portnum'].to_i, port['protocol'])
-						details.each {|detail|
-							if detail['cvss_base_score'].to_i > 7
-								#match = detail['cve']
-								#match = '.*' if match.nil?
-								#regex = Regexp.new(match, true, 'n')
-								#Msf::Ui::Console::CommandDispatcher::Core.show_module_set
-								#show_exploits(regex)
-								print_status("#{host['hostname']} | #{port['portnum']} | #{detail['severity']} | #{detail['pluginName']} | #{detail['cvss_base_score']} | #{detail['exploit_available']} | #{detail['cve']} | #{detail['risk_factor']}")
+				#print_error("This command is still in dev, right now it (maybe) just outputs vulns from a report that are > CVSS2 7.  It's slow.")
+				#print_error("Lets build our index to search in now, will save time I promise")
+				##nessus_exploits
+				#hosts=@n.report_ddhosts(rid)
+				#only_up = false
+				#proto = nil
+				#addresses = nil
+				#ports = nil
+				#names = nil
+				#framework.db.vulns(framework.db.workspace).each do |vuln|
+				#	#puts(vuln.inspect)
+				#	vuln.refs.each do |v|
+				#		puts(v.inspect)
+				#	end
+				framework.db.hosts(framework.db.workspace).each do |host|
+					xhost = host.address
+					host.vulns.each do |vuln|
+						svc = vuln.service
+						xport = xprot = nil
+						if(svc)
+							xport = svc.port
+							xprot = svc.proto
+						end
+						vuln.refs.each do |ref|
+							r = ref.name.upcase
+							
+							match = r
+							match = '.*' if match.nil?
+							regex = Regexp.new(match, true, 'n')
+							minrank = nil
+							#print("%bld%blu[*]%clr #{host['hostname']} | #{port['portnum']} | #{cve}")
+							File.open("xindex", "r") do |m|
+								while line = m.gets  
+									if (line.match(regex))
+										exp = line.split("|").first
+										print("%bld%blu[*]%clr #{xhost} | #{xport} | #{xprot} | #{r} | %bld%red#{exp}%clr \n")
+									end 
+								end  
 							end
-						
-							## need to search msf site on all BID's and CVE's and compile a list of possible plugins.  maybe db_autopwn does something i can use?
-							# btw, the | between things looks kinda cool.  lets have a party in table.rb later to see if we can add that as an option.
-							#
-						}
-					}
-				}
+							#show_exploits(regex)
+							#print("\n")
+						end
+					end
+					#puts(host.inspect)
+					#framework.db.services(framework.db.workspace, only_up, proto, host['address'], ports, names).each do |svc|
+					##	#<Msf::DBManager::Service id: 14, host_id: 1, created_at: "2010-10-02 11:44:17", port: 8009, proto: "tcp", state: "open", name: "192.168.1.7", updated_at: "2010-10-02 11:44:17", info: nil>
+					#	puts(svc.inspect)
+					#end
+					#tbl << [ host['hostname'], host['severity'], host['sev0'], host['sev1'], host['sev2'], host['sev3'], host['current'], host['total'] ]
+					#ports=@n.report_host_ports(rid, host['hostname'])
+					#ports.each {|port|
+					#	#tbl << [ port['portnum'], port['protocol'], port['severity'], port['svcname'], port['sev0'], port['sev1'], port['sev2'], port['sev3'] ]
+					#	details=@n.report_host_port_details(rid, host['hostname'], port['portnum'].to_i, port['protocol'])
+					#	next if port['portnum'].to_i == 0
+					#	details.each {|detail|
+					#		detail['cve'].each do |cve|
+					#			
+					#			match = cve
+					#			match = '.*' if match.nil?
+					#			regex = Regexp.new(match, true, 'n')
+					#			minrank = nil
+					#			print("%bld%blu[*]%clr #{host['hostname']} | #{port['portnum']} | #{cve}")
+					#			File.open("xindex", "r") do |m|
+					#				while line = m.gets  
+					#					if (line.match(regex))
+					#						exp = line.split("|").first
+					#						print("| %bld%red#{exp}%clr")
+					#					end 
+					#				end  
+					#			end
+					#			#show_exploits(regex)
+					#			print("\n")
+					#			#print_status("#{host['hostname']} | #{port['portnum']} | #{detail['severity']} | #{detail['pluginName']} | #{detail['cvss_base_score']} | #{detail['exploit_available']} | #{detail['cve']} | #{detail['risk_factor']}")
+					#		end
+					#		detail['bid'].each do |bid|
+					#			match = "BID-" << bid
+					#			match = '.*' if match.nil?
+					#			regex = Regexp.new(match, true, 'n')
+					#			minrank = nil
+					#			print("%bld%blu[*]%clr #{host['hostname']} | #{port['portnum']} | #{match}")
+					#			File.open("xindex", "r") do |m|
+					#				while line = m.gets  
+					#					if (line.match(regex))
+					#						exp = line.split("|").first
+					#						print("| %bld%red#{exp}%clr")
+					#					end 
+					#				end  
+					#			end
+					#			#show_exploits(regex)
+					#			print("\n")
+					#			#print_status("#{host['hostname']} | #{port['portnum']} | #{detail['severity']} | #{detail['pluginName']} | #{detail['cvss_base_score']} | #{detail['exploit_available']} | #{detail['cve']} | #{detail['risk_factor']}")
+					#		end
+					#	
+					#		## need to search msf site on all BID's and CVE's and compile a list of possible plugins.  maybe db_autopwn does something i can use?
+					#		# btw, the | between things looks kinda cool.  lets have a party in table.rb later to see if we can add that as an option.
+					#		#
+					#	}
+					#}
+				end
 				#print_good("Report Info")
 				#$stdout.puts "\n"
 				#$stdout.puts tbl.to_s + "\n"
