@@ -2662,7 +2662,7 @@ class DBManager
 			
 	
 			os = host['os']
-			
+			$stdout.print(os)
 			if os
 				report_note(
 					:workspace => wspace,

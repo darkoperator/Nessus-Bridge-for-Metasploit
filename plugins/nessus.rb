@@ -102,7 +102,13 @@ module Msf
 			end
 			
 			def cmd_nessus_exploits
-				#start = Time.now
+				#need to expand this to index all modules.  What kind of info is needed?
+				#find a better place to keep the indexes and a way to name them
+				#put in version checking:
+				#check if exists and is a valid readable file (read first line)
+				#If the version line at start of current index doesnt match rev number of msf, rebuild index
+				
+				start = Time.now
 				File.open("xindex", "w+") do |f|
 				framework.exploits.sort.each { |refname, mod|
 					stuff = ""
@@ -126,8 +132,8 @@ module Msf
 					f.puts(stuff)
 				}
 				end
-				#total = Time.now - start
-				#print_status(total)
+				total = Time.now - start
+				print_status("It has taken : #{total} seconds to build the exploits search index")
 			end
 			
 			def cmd_nessus_test1
@@ -1328,19 +1334,27 @@ module Msf
 		
 			def cmd_nessus_find_targets(*args)
 				pwn = Array.new
-				#if args[0] == "-h"
-				#	print_status("Usage: ")
-				#	print_status("       nessus_find targets <report id>")
-				#	print_status(" Example:> nessus_find_targets f0eabba3-4065-7d54-5763-f191e98eb0f7f9f33db7e75a06ca")
-				#	print_status()
-				#	print_status("Finds targets in a scan with CVSS2 > 7 and returns some info.")
-				#	print_status("%redThis plugin is experimental%clr")
-				#end
+				if args[0] == "-h"
+					print_status("Usage: ")
+					print_status("       nessus_find targets")
+					print_status(" Example:> nessus_find_targets")
+					print_status()
+					print_status("Finds targets based on refs and vulns in your workspace.")
+					print_status("%redThis plugin is experimental%clr")
+				end
 				#
 				##given a report ID, find hosts that are the most vulnerable.  Try to match to metasploit exploits if we can.
 				#if ! nessus_verify_token
 				#	return
 				#end
+				
+				if ! nessus_verify_db
+					print_error("You need a database configured for this command.")
+					print_error("Connect to a db with \"db_connect\"")
+					print_error("Then import scan with nessus_report_get")
+					return
+				end
+				
 				#
 				#case args.length
 				#when 1
@@ -1364,7 +1378,7 @@ module Msf
 				#			'Current Progress',
 				#			'Total Progress'
 				#		])
-				#print_error("This command is still in dev, right now it (maybe) just outputs vulns from a report that are > CVSS2 7.  It's slow.")
+				print_error("This command is still in dev, right now it (maybe) finds possible exploits for vulns in your workspace.")
 				#print_error("Lets build our index to search in now, will save time I promise")
 				##nessus_exploits
 				#hosts=@n.report_ddhosts(rid)
@@ -1378,14 +1392,33 @@ module Msf
 				#	vuln.refs.each do |v|
 				#		puts(v.inspect)
 				#	end
+				
+				
+				
+				## Maybe we need to ignore risk Factor: None on import?
 				framework.db.hosts(framework.db.workspace).each do |host|
 					xhost = host.address
+					@os = nil
+					@arch = nil
+					host.notes.each do |note|
+						
+						if (note.ntype == "host.os.nessus_fingerprint")
+							@os = note.data[:os]
+						else
+							@os = "unknown"
+						end
+						@os =~ /inux/ and @arch = "linux"
+						@os =~ /indows/ and @arch = "windows"
+					end
 					host.vulns.each do |vuln|
 						svc = vuln.service
 						xport = xprot = nil
 						if(svc)
 							xport = svc.port
 							xprot = svc.proto
+						end
+						if !(xport.to_i > 0)
+							next
 						end
 						vuln.refs.each do |ref|
 							r = ref.name.upcase
@@ -1396,10 +1429,14 @@ module Msf
 							minrank = nil
 							#print("%bld%blu[*]%clr #{host['hostname']} | #{port['portnum']} | #{cve}")
 							File.open("xindex", "r") do |m|
-								while line = m.gets  
+								while line = m.gets
 									if (line.match(regex))
 										exp = line.split("|").first
-										print("%bld%blu[*]%clr #{xhost} | #{xport} | #{xprot} | #{r} | %bld%red#{exp}%clr \n")
+										#print(@arch)
+										#archex = Regexp.new(@arch,true, 'n')
+										#if (exp.match(archex))
+											print("%bld%blu[*]%clr #{xhost} | #{@arch} | #{@os} | #{xport} | #{xprot} | #{r} | %bld%red#{exp}%clr \n")
+										#end
 									end 
 								end  
 							end
