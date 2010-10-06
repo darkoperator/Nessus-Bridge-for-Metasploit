@@ -232,17 +232,16 @@ module NessusXMLRPC
 		def policy_list_hash
 			post= { "token" => @token }
 			docxml = nil
-			docxml=nessus_request('policy/list', post)
+			docxml=nessus_request('scan/list', post)
 			if docxml.nil?
 				return
 			end
 			policies=Array.new
-			docxml.elements.each('/reply/contents/policies/policy') { |policy|
+			docxml.elements.each('/reply/contents/policies/policies/policy') { |policy|
 				entry=Hash.new
 				entry['id']=policy.elements['policyID'].text
 				entry['name']=policy.elements['policyName'].text
-				entry['owner']=policy.elements['policyOwner'].text
-				entry['vis']=policy.elements['visibility'].text
+				entry['comment']=policy.elements['policyComments'].text
 				policies.push(entry)
 			}
 			return policies

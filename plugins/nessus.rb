@@ -1526,12 +1526,11 @@ module Msf
 					  [
 						'ID',
 						'Name',
-						'Owner',
-						'visability'
+						'Comments'
 					])
 				list=@n.policy_list_hash
 				list.each {|policy|
-					tbl << [ policy['id'], policy['name'], policy['owner'], policy['vis'] ]
+					tbl << [ policy['id'], policy['name'], policy['comments'] ]
 				}
 				print_good("Nessus Policy List")
 				$stdout.puts "\n"
