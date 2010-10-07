@@ -225,6 +225,23 @@ module NessusXMLRPC
 			}
 			return scans
 		end
+		
+		def template_list_hash
+			post= { "token" => @token }
+			docxml = nessus_request('scan/list', post)
+			$stdout.puts(docxml)
+			templates = Array.new
+			docxml.elements.each('/reply/contents/templates/template') { |template|
+				entry=Hash.new
+				entry['name']=template.elements['name'].text if template.elements['name']
+				entry['pid']=template.elements['policy_id'].text if template.elements['policy_id']
+				entry['rname']=template.elements['readableName'].text if template.elements['readableName']
+				entry['owner']=template.elements['owner'].text if template.elements['owner']
+				entry['target']=template.elements['target'].text if template.elements['target']
+				templates.push(entry)
+			}
+			return templates
+		end
 	
 		# get hash of policies
 		#

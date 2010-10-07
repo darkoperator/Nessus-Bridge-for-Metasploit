@@ -59,6 +59,7 @@ module Msf
 					"nessus_exploits2" => "stuff2",
 					"nessus_test1" => "stuff",
 					"nessus_test2" => "stuff",
+					"nessus_template_list" => "List all the templates on the server",
 					#"nessus_policy_dupe" => "Duplicate a policy"
 					#"nessus_policy_rename" => "Rename a policy"
 					"nessus_find_targets" => "Try to find vulnerable targets from a report"
@@ -610,6 +611,7 @@ module Msf
 					print_status(" Example:> nessus_scan_status")
 					print_status()
 					print_status("Returns a list of information about currently running scans.")
+					return
 				end
 			
 				if ! nessus_verify_token
@@ -648,6 +650,52 @@ module Msf
 				print_status("You can:")
 				print_good("		Import Nessus report to database : 	nessus_report_get <reportid>")
 				print_good("		Pause a nessus scan : 			nessus_scan_pause <scanid>")
+			end
+			
+			def cmd_nessus_template_list(*args)
+			
+				if args[0] == "-h"
+					print_status("Usage: ")
+					print_status("       nessus_template_list")
+					print_status(" Example:> nessus_template_list")
+					print_status()
+					print_status("Returns a list of information about the server templates..")
+					return
+				end
+			
+				if ! nessus_verify_token
+					return
+				end
+			
+				list=@n.template_list_hash
+				puts(list)
+				#if list.empty?
+				#	print_status("No Templates Created.")
+				#	print_status("You can:")
+				#	print_status("        List of completed scans:     	nessus_report_list")
+				#	print_status("        Create a template:           		nessus_template_new <policy id> <scan name> <target(s)>")
+				#	return
+				#end
+				#
+				#tbl = Rex::Ui::Text::Table.new(
+				#	'Columns' =>
+				#	  [
+				#		'Template ID',
+				#		'Policy ID',
+				#		'Name',
+				#		'Owner',
+				#		'Target'
+				#	])
+				#
+				#list.each {|template|
+				#	tbl << [ template['name'], template['pid'], template['rname'], template['owner'], template['target'] ]
+				#}
+				#print_good("Templates")
+				#$stdout.puts "\n"
+				#$stdout.puts tbl.to_s + "\n"
+				#$stdout.puts "\n"
+				#print_status("You can:")
+				#print_good("		Import Nessus report to database : 	nessus_report_get <reportid>")
 			end
 		
 			def cmd_nessus_user_list(*args)
