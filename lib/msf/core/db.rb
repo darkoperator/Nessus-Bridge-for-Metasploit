@@ -1,7 +1,11 @@
 require 'rex/parser/nmap_xml'
 require 'rex/parser/nexpose_xml'
+require 'rex/parser/retina_xml'
+require 'rex/parser/netsparker_xml'
+require 'rex/parser/nessus_xml'
 require 'rex/socket'
 require 'zip'
+require 'uri'
 require 'tmpdir'
 require 'fileutils'
 
@@ -245,7 +249,7 @@ class DBManager
 			host.workspace   = wspace    if not host.workspace
 
 			# Always save the host, helps track updates
-			msfe_import_timestamps(opts,host)
+			msf_import_timestamps(opts,host)
 			host.save!
 
 			ret[:host] = host
@@ -333,7 +337,7 @@ class DBManager
 				service.state = ServiceState::Open
 			end
 			if (service and service.changed?)
-				msfe_import_timestamps(opts,service)
+				msf_import_timestamps(opts,service)
 				service.save!
 			end
 			ret[:service] = service
@@ -616,7 +620,7 @@ class DBManager
 				note.ntype    = ntype
 				note.data     = data
 			end
-			msfe_import_timestamps(opts,note)
+			msf_import_timestamps(opts,note)
 			note.save!
 
 			ret[:note] = note
@@ -720,7 +724,7 @@ class DBManager
 
 			# Update the timestamp
 			if cred.changed?
-				msfe_import_timestamps(opts,cred)
+				msf_import_timestamps(opts,cred)
 				cred.save!
 			end
 
@@ -825,10 +829,19 @@ class DBManager
 				vuln = host.vulns.find_or_initialize_by_name(name, :include => :refs)
 			end
 
-			if opts[:port] and opts[:proto]
-				vuln.service = host.services.find_or_create_by_port_and_proto(opts[:port], opts[:proto])
-			elsif opts[:port]
-				vuln.service = host.services.find_or_create_by_port_and_proto(opts[:port], "tcp")
+			if opts[:port]
+				proto = nil
+				case opts[:proto].to_s.downcase # Catch incorrect usages, as in report_note
+				when 'tcp','udp'
+					proto = opts[:proto]
+				when 'dns','snmp','dhcp'
+					proto = 'udp'
+					sname = opts[:proto]
+				else
+					proto = 'tcp'
+					sname = opts[:proto]
+				end
+				vuln.service = host.services.find_or_create_by_port_and_proto(opts[:port], proto)
 			end
 
 			if rids
@@ -836,7 +849,7 @@ class DBManager
 			end
 
 			if vuln.changed?
-				msfe_import_timestamps(opts,vuln)
+				msf_import_timestamps(opts,vuln)
 				vuln.save!
 			end
 			ret[:vuln] = vuln
@@ -1071,7 +1084,7 @@ class DBManager
 			loot.data  = data
 			loot.name  = name if name
 			loot.info  = info if info
-			msfe_import_timestamps(opts,loot)
+			msf_import_timestamps(opts,loot)
 			loot.save!
 
 			if !opts[:created_at]
@@ -1135,7 +1148,7 @@ class DBManager
 			task.path = path
 			task.progress = prog
 			task.result = result if result
-			msfe_import_timestamps(opts,task)
+			msf_import_timestamps(opts,task)
 			# Having blank completed_ats, while accurate, will cause unstoppable tasks.
 			if completed_at.nil? || completed_at.empty?
 				task.completed_at = opts[:updated_at]
@@ -1187,7 +1200,7 @@ class DBManager
 			report.options = options
 			report.rtype = rtype
 			report.path = path
-			msfe_import_timestamps(opts,report)
+			msf_import_timestamps(opts,report)
 			report.save!
 
 			ret[:task] = report
@@ -1211,6 +1224,364 @@ class DBManager
 	# WMAP
 	# Support methods
 	#
+
+	#
+	# Report a Web Site to the database.  WebSites must be tied to an existing Service
+	#
+	# opts MUST contain
+	#  :service* -- the service object this site should be associated with
+	#  :vhost    -- the virtual host name for this particular web site`
+	
+	# If service is NOT specified, the following values are mandatory
+	#  :host     -- the ip address of the server hosting the web site
+	#  :port     -- the port number of the associated web site
+	#  :ssl      -- whether or not SSL is in use on this port
+	#
+	# These values will be used to create new host and service records
+	
+	#
+	# opts can contain
+	#  :options    -- a hash of options for accessing this particular web site
+
+	# 
+	# Duplicate records for a given host, port, vhost combination will be overwritten
+	#
+	
+	def report_web_site(opts)
+		return if not active
+		wait = opts.delete(:wait)
+		wspace = opts.delete(:workspace) || workspace
+		vhost  = opts.delete(:vhost)
+
+		addr = nil
+		port = nil
+		name = nil		
+		serv = nil
+		
+		if opts[:service] and opts[:service].kind_of?(Service)
+			serv = opts[:service]
+		else
+			addr = opts[:host]
+			port = opts[:port]
+			name = opts[:ssl] ? 'https' : 'http'
+			if not (addr and port)
+				raise ArgumentError, "report_web_site requires service OR host/port/ssl"
+			end
+		end
+
+		ret = {}
+		task = queue(Proc.new {
+			
+			host = serv ? serv.host : find_or_create_host(
+				:workspace => wspace,
+				:host      => addr, 
+				:state     => Msf::HostState::Alive
+			)
+			
+			if host.name.to_s.empty?
+				host.name = vhost
+				host.save!
+			end
+			
+			serv = serv ? serv : find_or_create_service(
+				:workspace => wspace,
+				:host      => host, 
+				:port      => port, 
+				:proto     => 'tcp',
+				:state     => 'open'
+			)
+			
+			# Change the service name if it is blank or it has
+			# been explicitly specified.
+			if opts.keys.include?(:ssl) or serv.name.to_s.empty?
+				name = opts[:ssl] ? 'https' : 'http'
+				serv.name = name
+				serv.save!
+			end
+			
+			host.updated_at = host.created_at
+			host.state      = HostState::Alive
+			host.save!
+	
+			vhost ||= host.address
+
+			site = WebSite.find_or_initialize_by_vhost_and_service_id(vhost, serv[:id])
+			site.options = opts[:options] if opts[:options]
+			
+			# XXX:
+			msf_import_timestamps(opts, site)
+			site.save!
+
+			ret[:web_site] = site
+		})
+		if wait
+			return nil if task.wait() != :done
+			return ret[:web_site]
+		end
+		return task
+	end
+
+
+	#
+	# Report a Web Page to the database.  WebPage must be tied to an existing Web Site
+	#
+	# opts MUST contain
+	#  :web_site* -- the web site object that this page should be associated with
+	#  :path      -- the virtual host name for this particular web site
+	#  :code      -- the http status code from requesting this page
+	#  :headers   -- this is a HASH of headers (lowercase name as key) of ARRAYs of values
+	#  :body      -- the document body of the server response
+	#  :query     -- the query string after the path 	
+	
+	# If web_site is NOT specified, the following values are mandatory
+	#  :host     -- the ip address of the server hosting the web site
+	#  :port     -- the port number of the associated web site
+	#  :vhost    -- the virtual host for this particular web site
+	#  :ssl      -- whether or not SSL is in use on this port
+	#
+	# These values will be used to create new host, service, and web_site records
+	#
+	# opts can contain
+	#  :cookie   -- the Set-Cookie headers, merged into a string
+	#  :auth     -- the Authorization headers, merged into a string
+	#  :ctype    -- the Content-Type headers, merged into a string
+	#  :mtime    -- the timestamp returned from the server of the last modification time
+	#  :location -- the URL that a redirect points to
+	# 
+	# Duplicate records for a given web_site, path, and query combination will be overwritten
+	#
+	
+	def report_web_page(opts)
+		return if not active
+		wait = opts.delete(:wait)
+		wspace = opts.delete(:workspace) || workspace
+		
+		path    = opts[:path]
+		code    = opts[:code].to_i
+		body    = opts[:body].to_s
+		query   = opts[:query].to_s
+		headers = opts[:headers]		
+		site    = nil
+		
+		if not (path and code and body and headers)
+			raise ArgumentError, "report_web_page requires the path, query, code, body, and headers parameters"
+		end
+		
+		if opts[:web_site] and opts[:web_site].kind_of?(WebSite)
+			site = opts.delete(:web_site)
+		else
+			site = report_web_site(
+				:workspace => wspace,
+				:host      => opts[:host], :port => opts[:port], 
+				:vhost     => opts[:host], :ssl  => opts[:ssl], 
+				:wait      => true
+			)
+			if not site
+				raise ArgumentError, "report_web_page was unable to create the associated web site"
+			end
+		end
+
+		ret = {}
+		task = queue(Proc.new {
+			page = WebPage.find_or_initialize_by_web_site_id_and_path_and_query(site[:id], path, query)
+			page.code     = code
+			page.body     = body
+			page.headers  = headers	
+			page.cookie   = opts[:cookie] if opts[:cookie]
+			page.auth     = opts[:auth]   if opts[:auth]
+			page.mtime    = opts[:mtime]  if opts[:mtime]
+			page.ctype    = opts[:ctype]  if opts[:ctype]
+			page.location = opts[:location] if opts[:location]
+			msf_import_timestamps(opts, page)
+			page.save!
+
+			ret[:web_page] = page
+		})
+		if wait
+			return nil if task.wait() != :done
+			return ret[:web_page]
+		end
+		return task
+	end
+	
+			
+	#
+	# Report a Web Form to the database.  WebForm must be tied to an existing Web Site
+	#
+	# opts MUST contain
+	#  :web_site* -- the web site object that this page should be associated with
+	#  :path      -- the virtual host name for this particular web site
+	#  :query     -- the query string that is appended to the path (not valid for GET)
+	#  :method    -- the form method, one of GET, POST, or PATH
+	#  :params    -- an ARRAY of all parameters and values specified in the form
+	#
+	# If web_site is NOT specified, the following values are mandatory
+	#  :host     -- the ip address of the server hosting the web site
+	#  :port     -- the port number of the associated web site
+	#  :vhost    -- the virtual host for this particular web site
+	#  :ssl      -- whether or not SSL is in use on this port
+	#
+	# 
+	# Duplicate records for a given web_site, path, method, and params combination will be overwritten
+	#
+	
+	def report_web_form(opts)
+		return if not active
+		wait = opts.delete(:wait)
+		wspace = opts.delete(:workspace) || workspace
+		
+		path    = opts[:path]
+		meth    = opts[:method].to_s.upcase
+		para    = opts[:params]
+		quer    = opts[:query].to_s
+		site    = nil
+
+		if not (path and meth)
+			raise ArgumentError, "report_web_form requires the path and method parameters"
+		end
+		
+		if not %W{GET POST PATH}.include?(meth)
+			raise ArgumentError, "report_web_form requires the method to be one of GET, POST, PATH"
+		end
+
+		if opts[:web_site] and opts[:web_site].kind_of?(WebSite)
+			site = opts.delete(:web_site)
+		else
+			site = report_web_site(
+				:workspace => wspace,
+				:host      => opts[:host], :port => opts[:port], 
+				:vhost     => opts[:host], :ssl  => opts[:ssl], 
+				:wait      => true
+			)
+			if not site
+				raise ArgumentError, "report_web_form was unable to create the associated web site"
+			end
+		end
+
+		ret = {}
+		task = queue(Proc.new {
+		
+			# Since one of our serialized fields is used as a unique parameter, we must do the final
+			# comparisons through ruby and not SQL.
+			
+			form = nil
+			WebForm.find_all_by_web_site_id_and_path_and_method_and_query(site[:id], path, meth, quer).each do |xform|
+				if xform.params == para
+					form = xform
+					break
+				end 
+			end
+
+			if not form
+				form = WebForm.new
+				form.web_site_id = site[:id]
+				form.path        = path
+				form.method      = meth
+				form.params      = para
+				form.query       = quer
+			end 
+			
+			msf_import_timestamps(opts, form)
+			form.save!
+
+			ret[:web_form] = form
+		})
+		if wait
+			return nil if task.wait() != :done
+			return ret[:web_form]
+		end
+		return task
+	end
+
+
+	#
+	# Report a Web Vuln to the database.  WebVuln must be tied to an existing Web Site
+	#
+	# opts MUST contain
+	#  :web_site* -- the web site object that this page should be associated with
+	#  :path      -- the virtual host name for this particular web site
+	#  :query     -- the query string appended to the path (not valid for GET method flaws)
+	#  :method    -- the form method, one of GET, POST, or PATH
+	#  :params    -- an ARRAY of all parameters and values specified in the form
+	#  :pname     -- the specific field where the vulnerability occurs
+	#  :proof     -- the string showing proof of the vulnerability
+	#  :risk      -- an INTEGER value from 0 to 5 indicating the risk (5 is highest)
+	#  :name      -- the string indicating the type of vulnerability
+	#
+	# If web_site is NOT specified, the following values are mandatory
+	#  :host     -- the ip address of the server hosting the web site
+	#  :port     -- the port number of the associated web site
+	#  :vhost    -- the virtual host for this particular web site
+	#  :ssl      -- whether or not SSL is in use on this port
+	#
+	# 
+	# Duplicate records for a given web_site, path, method, pname, and name combination will be overwritten
+	#
+	
+	def report_web_vuln(opts)
+		return if not active
+		wait = opts.delete(:wait)
+		wspace = opts.delete(:workspace) || workspace
+		
+		path    = opts[:path]
+		meth    = opts[:method].to_s.upcase
+		para    = opts[:params] || []
+		quer    = opts[:query].to_s
+		pname   = opts[:pname]
+		proof   = opts[:proof]
+		risk    = opts[:risk].to_i
+		name    = opts[:name].to_s.strip
+		site    = nil
+
+		if not (path and meth and proof and pname)
+			raise ArgumentError, "report_web_vuln requires the path, method, proof, risk, name, params, and pname parameters"
+		end
+		
+		if not %W{GET POST PATH}.include?(meth)
+			raise ArgumentError, "report_web_vuln requires the method to be one of GET, POST, PATH"
+		end
+		
+		if risk < 0 or risk > 5
+			raise ArgumentError, "report_web_vuln requires the risk to be between 0 and 5 (inclusive)"
+		end
+		
+		if name.empty?
+			raise ArgumentError, "report_web_vuln requires the name to be a valid string"
+		end
+		
+		if opts[:web_site] and opts[:web_site].kind_of?(WebSite)
+			site = opts.delete(:web_site)
+		else
+			site = report_web_site(
+				:workspace => wspace,
+				:host      => opts[:host], :port => opts[:port], 
+				:vhost     => opts[:host], :ssl  => opts[:ssl], 
+				:wait      => true
+			)
+			if not site
+				raise ArgumentError, "report_web_form was unable to create the associated web site"
+			end
+		end
+
+		ret = {}
+		task = queue(Proc.new {
+		
+		
+			vuln = WebVuln.find_or_initialize_by_web_site_id_and_path_and_method_and_pname_and_name_and_query(site[:id], path, meth, pname, name, quer)
+			vuln.risk   = risk
+			vuln.params = para
+			vuln.proof  = proof.to_s	
+			msf_import_timestamps(opts, vuln)
+			vuln.save!
+
+			ret[:web_vuln] = vuln
+		})
+		if wait
+			return nil if task.wait() != :done
+			return ret[:web_vuln]
+		end
+		return task
+	end
 
 	#
 	# WMAP
@@ -1443,7 +1814,7 @@ class DBManager
 	end
 
 	# Handles timestamps from Metasploit Express imports.
-	def msfe_import_timestamps(opts,obj)
+	def msf_import_timestamps(opts,obj)
 		obj.created_at = opts["created_at"] if opts["created_at"]
 		obj.created_at = opts[:created_at] if opts[:created_at]
 		obj.updated_at = opts["updated_at"] ? opts["updated_at"] : obj.created_at
@@ -1494,13 +1865,14 @@ class DBManager
 		end
 		ftype = import_filetype_detect(data)
 		yield(:filetype, @import_filedata[:type]) if block
+		
 		self.send "import_#{ftype}".to_sym, args, &block
 	end
 
 
 	# Returns one of: :nexpose_simplexml :nexpose_rawxml :nmap_xml :openvas_xml
-	# :nessus_xml :nessus_xml_v2 :qualys_xml :msfe_xml :nessus_nbe :amap_mlog
-	# :amap_log :ip_list, :msfx_zip
+	# :nessus_xml :nessus_xml_v2 :qualys_xml :msf_xml :nessus_nbe :amap_mlog
+	# :amap_log :ip_list, :msf_zip
 	# If there is no match, an error is raised instead.
 	def import_filetype_detect(data)
 		if data.kind_of? Zip::ZipFile
@@ -1510,8 +1882,8 @@ class DBManager
 			@import_filedata[:zip_entry_names] = data.entries.map {|x| x.name}
 			@import_filedata[:zip_xml] = @import_filedata[:zip_entry_names].grep(/^(.*)_[0-9]+\.xml$/).first
 			@import_filedata[:zip_wspace] = $1
-			@import_filedata[:type] = "Metasploit Express ZIP Report"
-			return :msfx_zip if @import_filedata[:zip_xml]
+			@import_filedata[:type] = "Metasploit ZIP Report"
+			return :msf_zip if @import_filedata[:zip_xml]
 		end
 		di = data.index("\n")
 		firstline = data[0, di]
@@ -1522,6 +1894,9 @@ class DBManager
 		elsif (firstline.index("<NexposeReport"))
 			@import_filedata[:type] = "NeXpose XML Report"
 			return :nexpose_rawxml
+		elsif (firstline.index("<scanJob>"))
+			@import_filedata[:type] = "Retina XML"
+			return :retina_xml		
 		elsif (firstline.index("<?xml"))
 			# it's xml, check for root tags we can handle
 			line_count = 0
@@ -1543,9 +1918,15 @@ class DBManager
 				when "SCAN"
 					@import_filedata[:type] = "Qualys XML"
 					return :qualys_xml
-				when /MetasploitExpressV[123]/
-					@import_filedata[:type] = "Metasploit Express XML"
-					return :msfe_xml
+				when /MetasploitExpressV[1234]/
+					@import_filedata[:type] = "Metasploit XML"
+					return :msf_xml
+				when /MetasploitV4/
+					@import_filedata[:type] = "Metasploit XML"
+					return :msf_xml		
+				when /netsparker/
+					@import_filedata[:type] = "NetSparker XML"
+					return :netsparker_xml			
 				else
 					# Give up if we haven't hit the root tag in the first few lines
 					break if line_count > 10
@@ -1568,7 +1949,11 @@ class DBManager
 			# then its an IP list
 			@import_filedata[:type] = "IP Address List"
 			return :ip_list
+		elsif (data[0,1024].index("<netsparker"))
+			@import_filedata[:type] = "NetSparker XML"
+			return :netsparker_xml				
 		end
+		
 		raise DBImportError.new("Could not automatically determine file type")
 	end
 
@@ -1597,14 +1982,14 @@ class DBManager
 		import_nexpose_simplexml(args.merge(:data => data))
 	end
 
-	# Import a Metasploit Express XML file.
-	def import_msfe_file(args={})
+	# Import a Metasploit XML file.
+	def import_msf_file(args={})
 		filename = args[:filename]
 		wspace = args[:wspace] || workspace
 
 		f = File.open(filename, 'rb')
 		data = f.read(f.stat.size)
-		import_msfe_xml(args.merge(:data => data))
+		import_msf_xml(args.merge(:data => data))
 	end
 
 	# Import a Metasploit Express ZIP file. Note that this requires
@@ -1614,14 +1999,14 @@ class DBManager
 	# be reused. If target files exist, they will be overwritten.
 	#
 	# XXX: Refactor so it's not quite as sanity-blasting.
-	def import_msfx_zip(args={}, &block)
+	def import_msf_zip(args={}, &block)
 		data = args[:data]
 		wpsace = args[:wspace] || workspace
 		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
 
-		new_tmp = File.join(Dir::tmpdir,"msfx",@import_filedata[:zip_basename])
-		if File.exists? new_tmp
-			unless (File.directory?(new_tmp) && File.writable?(new_tmp))
+		new_tmp = ::File.join(Dir::tmpdir,"msf",@import_filedata[:zip_basename])
+		if ::File.exists? new_tmp
+			unless (::File.directory?(new_tmp) && ::File.writable?(new_tmp))
 				raise DBImportError.new("Could not extract zip file to #{new_tmp}")
 			end
 		else
@@ -1629,22 +2014,22 @@ class DBManager
 		end
 		@import_filedata[:zip_tmp] = new_tmp
 
-		@import_filedata[:zip_tmp_subdirs] = @import_filedata[:zip_entry_names].map {|x| File.split(x)}.map {|x| x[0]}.uniq.reject {|x| x == "."}
+		@import_filedata[:zip_tmp_subdirs] = @import_filedata[:zip_entry_names].map {|x| ::File.split(x)}.map {|x| x[0]}.uniq.reject {|x| x == "."}
 
 		@import_filedata[:zip_tmp_subdirs].each {|sub|
-			tmp_subdirs = File.join(@import_filedata[:zip_tmp],sub)
+			tmp_subdirs = ::File.join(@import_filedata[:zip_tmp],sub)
 			if File.exists? tmp_subdirs
-				unless (File.directory?(tmp_subdirs) && File.writable?(tmp_subdirs))
+				unless (::File.directory?(tmp_subdirs) && File.writable?(tmp_subdirs))
 					raise DBImportError.new("Could not extract zip file to #{tmp_subdirs}")
 				end
 			else
-				FileUtils.mkdir(tmp_subdirs)
+				::FileUtils.mkdir(tmp_subdirs)
 			end
 		}
 
 		data.entries.each do |e|
-			target = File.join(@import_filedata[:zip_tmp],e.name)
-			File.unlink target if File.exists?(target) # Yep. Deleted.
+			target = ::File.join(@import_filedata[:zip_tmp],e.name)
+			::File.unlink target if ::File.exists?(target) # Yep. Deleted.
 			data.extract(e,target)
 			if target =~ /^.*.xml$/
 				@import_filedata[:zip_extracted_xml] = target
@@ -1667,173 +2052,185 @@ class DBManager
 
 		# Kick down to all the MSFX ZIP specific items
 		if block
-			import_msfx_collateral(new_args, &block)
+			import_msf_collateral(new_args, &block)
 		else
-			import_msfx_collateral(new_args)
+			import_msf_collateral(new_args)
 		end
 	end
 
-	# Imports loot, tasks, and reports from an MSFX ZIP report.
+	# Imports loot, tasks, and reports from an MSF ZIP report.
 	# XXX: This function is stupidly long. It needs to be refactored.
-	def import_msfx_collateral(args={}, &block)
-		data = File.open(args[:filename], "rb") {|f| f.read(f.stat.size)}
+	def import_msf_collateral(args={}, &block)
+		data = ::File.open(args[:filename], "rb") {|f| f.read(f.stat.size)}
 		wspace = args[:wspace] || args['wspace'] || workspace
 		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
-		basedir = args[:basedir] || args['basedir'] || File.join(Msf::Config.install_root, "data", "msfx")
+		basedir = args[:basedir] || args['basedir'] || ::File.join(Msf::Config.install_root, "data", "msf")
 
 		allow_yaml = false
+		btag = nil
 
 		doc = rexmlify(data)
 		if doc.elements["MetasploitExpressV1"]
 			m_ver = 1
 			allow_yaml = true
+			btag = "MetasploitExpressV1"
 		elsif doc.elements["MetasploitExpressV2"]
 			m_ver = 2
 			allow_yaml = true
+			btag = "MetasploitExpressV2"
 		elsif doc.elements["MetasploitExpressV3"]
 			m_ver = 3
+			btag = "MetasploitExpressV3"
+		elsif doc.elements["MetasploitExpressV4"]
+			m_ver = 4
+			btag = "MetasploitExpressV4"
+		elsif doc.elements["MetasploitV4"]
+			m_ver = 4
+			btag = "MetasploitV4"			
 		else
 			m_ver = nil
 		end
-		unless m_ver
-			raise DBImportError.new("Unknown verion for MetasploitExpress XML document")
+		unless m_ver and btag
+			raise DBImportError.new("Unsupported Metasploit XML document format")
 		end
 
 		host_info = {}
-		doc.elements.each("/MetasploitExpressV#{m_ver}/hosts/host") do |host|
-			host_info[host.elements["id"].text.to_s.strip] = host.elements["address"].text.to_s.strip
+		doc.elements.each("/#{btag}/hosts/host") do |host|
+			host_info[host.elements["id"].text.to_s.strip] = nils_for_nulls(host.elements["address"].text.to_s.strip)
 		end
 
 		# Import Loot
-		doc.elements.each("/MetasploitExpressV#{m_ver}/loots/loot") do |loot|
+		doc.elements.each("/#{btag}/loots/loot") do |loot|
 			next if bl.include? host_info[loot.elements["host-id"].text.to_s.strip]
 			loot_info = {}
 			loot_info[:host] = host_info[loot.elements["host-id"].text.to_s.strip]
 			loot_info[:workspace] = args[:wspace]
-			loot_info[:ctype] = loot.elements["content-type"].text.to_s.strip
-			loot_info[:info] = unserialize_object(loot.elements["info"], allow_yaml)
-			loot_info[:ltype] = loot.elements["ltype"].text.to_s.strip
-			loot_info[:name] = loot.elements["name"].text.to_s.strip
-			loot_info[:created_at] = loot.elements["created-at"].text.to_s.strip
-			loot_info[:updated_at] = loot.elements["updated-at"].text.to_s.strip
-			loot_info[:name] = loot.elements["name"].text.to_s.strip
-			loot_info[:orig_path] = loot.elements["path"].text.to_s.strip
+			loot_info[:ctype] = nils_for_nulls(loot.elements["content-type"].text.to_s.strip)
+			loot_info[:info] = nils_for_nulls(unserialize_object(loot.elements["info"], allow_yaml))
+			loot_info[:ltype] = nils_for_nulls(loot.elements["ltype"].text.to_s.strip)
+			loot_info[:name] = nils_for_nulls(loot.elements["name"].text.to_s.strip)
+			loot_info[:created_at] = nils_for_nulls(loot.elements["created-at"].text.to_s.strip)
+			loot_info[:updated_at] = nils_for_nulls(loot.elements["updated-at"].text.to_s.strip)
+			loot_info[:name] = nils_for_nulls(loot.elements["name"].text.to_s.strip)
+			loot_info[:orig_path] = nils_for_nulls(loot.elements["path"].text.to_s.strip)
 			tmp = args[:ifd][:zip_tmp]
-			loot_info[:orig_path].gsub!(/^\./,tmp)
-			if loot.elements["service-id"].text.to_s.strip.size > 0
-				loot_info[:service] = loot.elements["service-id"].text.to_s.strip
+			loot_info[:orig_path].gsub!(/^\./,tmp) if loot_info[:orig_path]
+			if !loot.elements["service-id"].text.to_s.strip.empty?
+				unless loot.elements["service-id"].text.to_s.strip == "NULL"
+					loot_info[:service] = loot.elements["service-id"].text.to_s.strip
+				end
 			end
 
 			# Only report loot if we actually have it.
 			# TODO: Copypasta. Seperate this out.
-			if File.exists? loot_info[:orig_path]
-				loot_dir = File.join(basedir,"loot")
-				loot_file = File.split(loot_info[:orig_path]).last
-				if File.exists? loot_dir
-					unless (File.directory?(loot_dir) && File.writable?(loot_dir))
+			if ::File.exists? loot_info[:orig_path]
+				loot_dir = ::File.join(basedir,"loot")
+				loot_file = ::File.split(loot_info[:orig_path]).last
+				if ::File.exists? loot_dir
+					unless (::File.directory?(loot_dir) && ::File.writable?(loot_dir))
 						raise DBImportError.new("Could not move files to #{loot_dir}")
 					end
 				else
-					FileUtils.mkdir_p(loot_dir)
+					::FileUtils.mkdir_p(loot_dir)
 				end
-				new_loot = File.join(loot_dir,loot_file)
+				new_loot = ::File.join(loot_dir,loot_file)
 				loot_info[:path] = new_loot
-				if File.exists?(new_loot)
-					File.unlink new_loot # Delete it, and don't report it.
+				if ::File.exists?(new_loot)
+					::File.unlink new_loot # Delete it, and don't report it.
 				else
 					report_loot(loot_info) # It's new, so report it.
 				end
-				FileUtils.copy(loot_info[:orig_path], new_loot)
-				yield(:msfx_loot, new_loot) if block
+				::FileUtils.copy(loot_info[:orig_path], new_loot)
+				yield(:msf_loot, new_loot) if block
 			end
 		end
 
 		# Import Tasks
-		doc.elements.each("/MetasploitExpressV#{m_ver}/tasks/task") do |task|
+		doc.elements.each("/#{btag}/tasks/task") do |task|
 			task_info = {}
 			task_info[:workspace] = args[:wspace]
 			# Should user be imported (original) or declared (the importing user)?
-			task_info[:user] = task.elements["created-by"].text.to_s.strip
-			task_info[:desc] = task.elements["description"].text.to_s.strip
-			task_info[:info] = unserialize_object(task.elements["info"], allow_yaml)
-			task_info[:mod] = task.elements["module"].text.to_s.strip
-			task_info[:options] = task.elements["options"].text.to_s.strip
-			task_info[:prog] = task.elements["progress"].text.to_i
-			task_info[:created_at] = task.elements["created-at"].text.to_s.strip
-			task_info[:updated_at] = task.elements["updated-at"].text.to_s.strip
+			task_info[:user] = nils_for_nulls(task.elements["created-by"].text.to_s.strip)
+			task_info[:desc] = nils_for_nulls(task.elements["description"].text.to_s.strip)
+			task_info[:info] = nils_for_nulls(unserialize_object(task.elements["info"], allow_yaml))
+			task_info[:mod] = nils_for_nulls(task.elements["module"].text.to_s.strip)
+			task_info[:options] = nils_for_nulls(task.elements["options"].text.to_s.strip)
+			task_info[:prog] = nils_for_nulls(task.elements["progress"].text.to_s.strip).to_i
+			task_info[:created_at] = nils_for_nulls(task.elements["created-at"].text.to_s.strip)
+			task_info[:updated_at] = nils_for_nulls(task.elements["updated-at"].text.to_s.strip)
 			if !task.elements["completed-at"].text.to_s.empty?
-				task_info[:completed_at] = task.elements["completed-at"].text.to_s.strip
+				task_info[:completed_at] = nils_for_nulls(task.elements["completed-at"].text.to_s.strip)
 			end
 			if !task.elements["error"].text.to_s.empty?
-				task_info[:error] = task.elements["error"].text.to_s.strip
+				task_info[:error] = nils_for_nulls(task.elements["error"].text.to_s.strip)
 			end
 			if !task.elements["result"].text.to_s.empty?
-				task_info[:result] = task.elements["result"].text.to_s.strip
+				task_info[:result] = nils_for_nulls(task.elements["result"].text.to_s.strip)
 			end
-			task_info[:orig_path] = task.elements["path"].text.to_s.strip
+			task_info[:orig_path] = nils_for_nulls(task.elements["path"].text.to_s.strip)
 			tmp = args[:ifd][:zip_tmp]
-			task_info[:orig_path].gsub!(/^\./,tmp)
+			task_info[:orig_path].gsub!(/^\./,tmp) if task_info[:orig_path]
 
 			# Only report a task if we actually have it.
 			# TODO: Copypasta. Seperate this out.
-			if File.exists? task_info[:orig_path]
-				tasks_dir = File.join(basedir,"tasks")
-				task_file = File.split(task_info[:orig_path]).last
-				if File.exists? tasks_dir
-					unless (File.directory?(tasks_dir) && File.writable?(tasks_dir))
+			if ::File.exists? task_info[:orig_path]
+				tasks_dir = ::File.join(basedir,"tasks")
+				task_file = ::File.split(task_info[:orig_path]).last
+				if ::File.exists? tasks_dir
+					unless (::File.directory?(tasks_dir) && ::File.writable?(tasks_dir))
 						raise DBImportError.new("Could not move files to #{tasks_dir}")
 					end
 				else
-					FileUtils.mkdir_p(tasks_dir)
+					::FileUtils.mkdir_p(tasks_dir)
 				end
-				new_task = File.join(tasks_dir,task_file)
+				new_task = ::File.join(tasks_dir,task_file)
 				task_info[:path] = new_task
-				if File.exists?(new_task)
-					File.unlink new_task # Delete it, and don't report it.
+				if ::File.exists?(new_task)
+					::File.unlink new_task # Delete it, and don't report it.
 				else
 					report_task(task_info) # It's new, so report it.
 				end
-				FileUtils.copy(task_info[:orig_path], new_task)
-				yield(:msfx_task, new_task) if block
+				::FileUtils.copy(task_info[:orig_path], new_task)
+				yield(:msf_task, new_task) if block
 			end
 		end
 
 		# Import Reports
-		doc.elements.each("/MetasploitExpressV#{m_ver}/reports/report") do |report|
+		doc.elements.each("/#{btag}/reports/report") do |report|
 			report_info = {}
 			report_info[:workspace] = args[:wspace]
 			# Should user be imported (original) or declared (the importing user)?
-			report_info[:user] = report.elements["created-by"].text.to_s.strip
-			report_info[:options] = report.elements["options"].text.to_s.strip
-			report_info[:rtype] = report.elements["rtype"].text.to_s.strip
-			report_info[:created_at] = report.elements["created-at"].text.to_s.strip
-			report_info[:updated_at] = report.elements["updated-at"].text.to_s.strip
+			report_info[:user] = nils_for_nulls(report.elements["created-by"].text.to_s.strip)
+			report_info[:options] = nils_for_nulls(report.elements["options"].text.to_s.strip)
+			report_info[:rtype] = nils_for_nulls(report.elements["rtype"].text.to_s.strip)
+			report_info[:created_at] = nils_for_nulls(report.elements["created-at"].text.to_s.strip)
+			report_info[:updated_at] = nils_for_nulls(report.elements["updated-at"].text.to_s.strip)
 
-			report_info[:orig_path] = report.elements["path"].text.to_s.strip
+			report_info[:orig_path] = nils_for_nulls(report.elements["path"].text.to_s.strip)
 			tmp = args[:ifd][:zip_tmp]
-			report_info[:orig_path].gsub!(/^\./,tmp)
+			report_info[:orig_path].gsub!(/^\./,tmp) if report_info[:orig_path]
 
 			# Only report a report if we actually have it.
 			# TODO: Copypasta. Seperate this out.
-			if File.exists? report_info[:orig_path]
-				reports_dir = File.join(basedir,"reports")
-				report_file = File.split(report_info[:orig_path]).last
-				if File.exists? reports_dir
-					unless (File.directory?(reports_dir) && File.writable?(reports_dir))
+			if ::File.exists? report_info[:orig_path]
+				reports_dir = ::File.join(basedir,"reports")
+				report_file = ::File.split(report_info[:orig_path]).last
+				if ::File.exists? reports_dir
+					unless (::File.directory?(reports_dir) && ::File.writable?(reports_dir))
 						raise DBImportError.new("Could not move files to #{reports_dir}")
 					end
 				else
-					FileUtils.mkdir_p(reports_dir)
+					::FileUtils.mkdir_p(reports_dir)
 				end
-				new_report = File.join(reports_dir,report_file)
+				new_report = ::File.join(reports_dir,report_file)
 				report_info[:path] = new_report
-				if File.exists?(new_report)
-					File.unlink new_report
+				if ::File.exists?(new_report)
+					::File.unlink new_report
 				else
 					report_report(report_info)
 				end
-				FileUtils.copy(report_info[:orig_path], new_report)
-				yield(:msfx_report, new_report) if block
+				::FileUtils.copy(report_info[:orig_path], new_report)
+				yield(:msf_report, new_report) if block
 			end
 		end
 
@@ -1842,45 +2239,55 @@ class DBManager
 	# For each host, step through services, notes, and vulns, and import
 	# them.
 	# TODO: loot, tasks, and reports
-	def import_msfe_xml(args={}, &block)
+	def import_msf_xml(args={}, &block)
 		data = args[:data]
 		wspace = args[:wspace] || workspace
 		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
 
 		allow_yaml = false
-
+		btag       = nil
+		
 		doc = rexmlify(data)
 		if doc.elements["MetasploitExpressV1"]
 			m_ver = 1
 			allow_yaml = true
+			btag = "MetasploitExpressV1"
 		elsif doc.elements["MetasploitExpressV2"]
 			m_ver = 2
 			allow_yaml = true
+			btag = "MetasploitExpressV2"			
 		elsif doc.elements["MetasploitExpressV3"]
 			m_ver = 3
+			btag = "MetasploitExpressV3"			
+		elsif doc.elements["MetasploitExpressV4"]
+			m_ver = 4			
+			btag = "MetasploitExpressV4"
+		elsif doc.elements["MetasploitV4"]
+			m_ver = 4			
+			btag = "MetasploitV4"						
 		else
 			m_ver = nil
 		end
-		unless m_ver
-			raise DBImportError.new("Unknown verion for MetasploitExpress XML document")
+		unless m_ver and btag
+			raise DBImportError.new("Unsupported Metasploit XML document format")
 		end
 
-		doc.elements.each("/MetasploitExpressV#{m_ver}/hosts/host") do |host|
+		doc.elements.each("/#{btag}/hosts/host") do |host|
 			host_data = {}
 			host_data[:workspace] = wspace
-			host_data[:host] = host.elements["address"].text.to_s.strip
+			host_data[:host] = nils_for_nulls(host.elements["address"].text.to_s.strip)
 			if bl.include? host_data[:host]
 				next
 			else
 				yield(:address,host_data[:host]) if block
 			end
-			host_data[:host_mac] = host.elements["mac"].text.to_s.strip
+			host_data[:host_mac] = nils_for_nulls(host.elements["mac"].text.to_s.strip)
 			if host.elements["comm"].text
-				host_data[:comm] = host.elements["comm"].text.to_s.strip
+				host_data[:comm] = nils_for_nulls(host.elements["comm"].text.to_s.strip)
 			end
-			%w{created-at updated-at name state os-flavor os-lang os-name os-sp purpose}.each { |datum|
+			%W{created-at updated-at name state os-flavor os-lang os-name os-sp purpose}.each { |datum|
 				if host.elements[datum].text
-					host_data[datum.gsub('-','_')] = host.elements[datum].text.to_s.strip
+					host_data[datum.gsub('-','_')] = nils_for_nulls(host.elements[datum].text.to_s.strip)
 				end
 			}
 			host_address = host_data[:host].dup # Preserve after report_host() deletes
@@ -1889,14 +2296,14 @@ class DBManager
 				service_data = {}
 				service_data[:workspace] = wspace
 				service_data[:host] = host_address
-				service_data[:port] = service.elements["port"].text.to_i
-				service_data[:proto] = service.elements["proto"].text.to_s.strip
-				%w{created-at updated-at name state info}.each { |datum|
+				service_data[:port] = nils_for_nulls(service.elements["port"].text.to_s.strip).to_i
+				service_data[:proto] = nils_for_nulls(service.elements["proto"].text.to_s.strip)
+				%W{created-at updated-at name state info}.each { |datum|
 					if service.elements[datum].text
 						if datum == "info"
-							service_data["info"] = unserialize_object(service.elements[datum], false)
+							service_data["info"] = nils_for_nulls(unserialize_object(service.elements[datum], false))
 						else
-							service_data[datum.gsub("-","_")] = service.elements[datum].text.to_s.strip
+							service_data[datum.gsub("-","_")] = nils_for_nulls(service.elements[datum].text.to_s.strip)
 						end
 					end
 				}
@@ -1906,18 +2313,18 @@ class DBManager
 				note_data = {}
 				note_data[:workspace] = wspace
 				note_data[:host] = host_address
-				note_data[:type] = note.elements["ntype"].text.to_s.strip
-				note_data[:data] = unserialize_object(note.elements["data"], allow_yaml)
+				note_data[:type] = nils_for_nulls(note.elements["ntype"].text.to_s.strip)
+				note_data[:data] = nils_for_nulls(unserialize_object(note.elements["data"], allow_yaml))
 
 				if note.elements["critical"].text
-					note_data[:critical] = true
+					note_data[:critical] = true unless note.elements["critical"].text.to_s.strip == "NULL"
 				end
 				if note.elements["seen"].text
-					note_data[:seen] = true
+					note_data[:seen] = true unless note.elements["critical"].text.to_s.strip == "NULL"
 				end
-				%w{created-at updated-at}.each { |datum|
+				%W{created-at updated-at}.each { |datum|
 					if note.elements[datum].text
-						note_data[datum.gsub("-","_")] = note.elements[datum].text.to_s.strip
+						note_data[datum.gsub("-","_")] = nils_for_nulls(note.elements[datum].text.to_s.strip)
 					end
 				}
 				report_note(note_data)
@@ -1926,11 +2333,11 @@ class DBManager
 				vuln_data = {}
 				vuln_data[:workspace] = wspace
 				vuln_data[:host] = host_address
-				vuln_data[:info] = unserialize_object(vuln.elements["info"], allow_yaml)
-				vuln_data[:name] = vuln.elements["name"].text.to_s.strip
-				%w{created-at updated-at}.each { |datum|
+				vuln_data[:info] = nils_for_nulls(unserialize_object(vuln.elements["info"], allow_yaml))
+				vuln_data[:name] = nils_for_nulls(vuln.elements["name"].text.to_s.strip)
+				%W{created-at updated-at}.each { |datum|
 					if vuln.elements[datum].text
-						vuln_data[datum.gsub("-","_")] = vuln.elements[datum].text.to_s.strip
+						vuln_data[datum.gsub("-","_")] = nils_for_nulls(vuln.elements[datum].text.to_s.strip)
 					end
 				}
 				report_vuln(vuln_data)
@@ -1939,14 +2346,14 @@ class DBManager
 				cred_data = {}
 				cred_data[:workspace] = wspace
 				cred_data[:host] = host_address
-				%w{port ptype sname proto proof active user pass}.each {|datum|
+				%W{port ptype sname proto proof active user pass}.each {|datum|
 					if cred.elements[datum].respond_to? :text
-						cred_data[datum.intern] = cred.elements[datum].text.to_s.strip
+						cred_data[datum.intern] = nils_for_nulls(cred.elements[datum].text.to_s.strip)
 					end
 				}
-				%w{created-at updated-at}.each { |datum|
+				%W{created-at updated-at}.each { |datum|
 					if cred.elements[datum].respond_to? :text
-						cred_data[datum.gsub("-","_")] = cred.elements[datum].text.to_s.strip
+						cred_data[datum.gsub("-","_")] = nils_for_nulls(cred.elements[datum].text.to_s.strip)
 					end
 				}
 				if cred_data[:pass] == "<masked>"
@@ -1958,6 +2365,79 @@ class DBManager
 				report_cred(cred_data.merge(:wait => true))
 			end
 		end
+		
+		# Import web sites
+		doc.elements.each("/#{btag}/web_sites/web_site") do |web|
+			info = {}
+			info[:workspace] = wspace
+			
+			%W{host port vhost ssl comments}.each do |datum|
+				if web.elements[datum].respond_to? :text
+					info[datum.intern] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+				end					
+			end
+								
+			info[:options]   = nils_for_nulls(unserialize_object(web.elements["options"], allow_yaml)) if web.elements["options"].respond_to?(:text)
+			info[:ssl]       = (info[:ssl] and info[:ssl].to_s.strip.downcase == "true") ? true : false
+									
+			%W{created-at updated-at}.each { |datum|
+				if web.elements[datum].text
+					info[datum.gsub("-","_")] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+				end
+			}
+			
+			report_web_site(info)
+		end
+		
+		%W{page form vuln}.each do |wtype|
+			doc.elements.each("/#{btag}/web_#{wtype}s/web_#{wtype}") do |web|
+				info = {}
+				info[:workspace] = wspace
+				info[:host]      = nils_for_nulls(web.elements["host"].text.to_s.strip)  if web.elements["host"].respond_to?(:text)
+				info[:port]      = nils_for_nulls(web.elements["port"].text.to_s.strip)  if web.elements["port"].respond_to?(:text)
+				info[:ssl]       = nils_for_nulls(web.elements["ssl"].text.to_s.strip)   if web.elements["ssl"].respond_to?(:text)
+				info[:vhost]     = nils_for_nulls(web.elements["vhost"].text.to_s.strip) if web.elements["vhost"].respond_to?(:text)
+				
+				info[:ssl] = (info[:ssl] and info[:ssl].to_s.strip.downcase == "true") ? true : false
+				
+				case wtype
+				when "page"
+					%W{path code body query cookie auth ctype mtime location}.each do |datum|
+						if web.elements[datum].respond_to? :text
+							info[datum.intern] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+						end					
+					end
+					info[:headers] = nils_for_nulls(unserialize_object(web.elements["headers"], allow_yaml))
+				when "form"
+					%W{path query method}.each do |datum|
+						if web.elements[datum].respond_to? :text
+							info[datum.intern] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+						end					
+					end
+					info[:params] = nils_for_nulls(unserialize_object(web.elements["params"], allow_yaml))				
+				when "vuln"
+					%W{path query method pname proof risk name}.each do |datum|
+						if web.elements[datum].respond_to? :text
+							info[datum.intern] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+						end					
+					end
+					info[:params] = nils_for_nulls(unserialize_object(web.elements["params"], allow_yaml))		
+					info[:risk]   = info[:risk].to_i			
+				end
+									
+				%W{created-at updated-at}.each { |datum|
+					if web.elements[datum].text
+						info[datum.gsub("-","_")] = nils_for_nulls(web.elements[datum].text.to_s.strip)
+					end
+				}
+				self.send("report_web_#{wtype}", info)
+			end
+		end
+	end
+
+	# Convert the string "NULL" to actual nil
+	def nils_for_nulls(str)
+		str == "NULL" ? nil : str
 	end
 
 	def import_nexpose_simplexml(args={}, &block)
@@ -2232,6 +2712,307 @@ class DBManager
 		}
 	end
 
+
+	#
+	# Retina XML
+	#
+
+	# Process a Retina XML file
+	def import_retina_xml_file(args={})
+		filename = args[:filename]
+		wspace = args[:wspace] || workspace
+
+		f = File.open(filename, 'rb')
+		data = f.read(f.stat.size)
+		import_retina_xml(args.merge(:data => data))
+	end
+
+	# Process Retina XML
+	def import_retina_xml(args={}, &block)
+		data = args[:data]
+		wspace = args[:wspace] || workspace
+		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
+	
+		parser = Rex::Parser::RetinaXMLStreamParser.new
+		parser.on_found_host = Proc.new do |host|
+			data = {:workspace => wspace}
+			addr = host['address']
+			next if not addr
+			
+			next if bl.include? addr
+			data[:host] = addr
+			
+			if host['mac']
+				data[:mac] = host['mac']
+			end
+			
+			data[:state] = Msf::HostState::Alive
+
+			if host['hostname']
+				data[:name] = host['hostname']
+			end
+
+			if host['netbios']
+				data[:name] = host['netbios']
+			end
+			
+			yield(:address, data[:host]) if block
+			
+			# Import Host
+			report_host(data)
+			report_import_note(wspace, addr)
+			
+			# Import OS fingerprint
+			if host["os"]
+				note = {
+					:workspace => wspace,
+					:host => addr,
+					:type => 'host.os.retina_fingerprint',
+					:data => {
+						:os => host["os"]
+					}
+				}
+				report_note(note)
+			end
+			
+			# Import vulnerabilities
+			host['vulns'].each do |vuln|
+				refs = vuln['refs'].map{|v| v.join("-")}
+				refs << "RETINA-#{vuln['rthid']}" if vuln['rthid']
+
+				vuln_info = {
+					:workspace => wspace,
+					:host => addr,
+					:name => vuln['name'],
+					:info => vuln['description'],
+					:refs => refs
+				}
+				
+				report_vuln(vuln_info)
+			end
+		end
+
+		REXML::Document.parse_stream(data, parser)
+	end
+
+	#
+	# NetSparker XML
+	#
+
+	# Process a NetSparker XML file
+	def import_netsparker_xml_file(args={})
+		filename = args[:filename]
+		wspace = args[:wspace] || workspace
+
+		f = File.open(filename, 'rb')
+		data = f.read(f.stat.size)
+		import_netsparker_xml(args.merge(:data => data))
+	end
+
+	# Process Retina XML
+	def import_netsparker_xml(args={}, &block)
+		data = args[:data]
+		wspace = args[:wspace] || workspace
+		bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
+		addr = nil
+		parser = Rex::Parser::NetSparkerXMLStreamParser.new
+		parser.on_found_vuln = Proc.new do |vuln|
+			data = {:workspace => wspace}
+
+			# Parse the URL
+			url  = vuln['url']
+			return if not url
+
+			# Crack the URL into a URI			
+			uri = URI(url) rescue nil
+			return if not uri
+			
+			# Resolve the host and cache the IP
+			if not addr
+				baddr = Rex::Socket.addr_aton(uri.host) rescue nil
+				if baddr
+					addr = Rex::Socket.addr_ntoa(baddr)
+					yield(:address, data[:host]) if block
+				end
+			end
+			
+			# Bail early if we have no IP address
+			if not addr
+				raise Interrupt, "Not a valid IP address"
+			end
+			
+			if bl.include?(addr)
+				raise Interrupt, "IP address is on the blacklist"
+			end
+
+			data[:host]  = addr
+			data[:vhost] = uri.host
+			data[:port]  = uri.port
+			data[:ssl]   = (uri.scheme == "ssl")
+
+			msf_vrisk,msf_vtype = netsparker_vuln_map(vuln['type'])
+			
+			body = nil
+			# First report a web page
+			if vuln['response']
+				headers = {}
+				code    = 200
+				head,body = vuln['response'].to_s.split(/\r?\n\r?\n/, 2)
+				if body
+				
+					if head =~ /^HTTP\d+\.\d+\s+(\d+)\s*/
+						code = $1.to_i
+					end
+				
+					headers = {}
+					head.split(/\r?\n/).each do |line|
+						hname,hval = line.strip.split(/\s*:\s*/, 2)
+						next if hval.to_s.strip.empty?
+						headers[hname.downcase] ||= []
+						headers[hname.downcase] << hval
+					end
+					
+					info = { 
+						:path     => uri.path,
+						:query    => uri.query,
+						:code     => code,
+						:body     => body,
+						:headers  => headers
+					}
+					info.merge!(data)
+					
+					if headers['content-type']
+						info[:ctype] = headers['content-type'][0]
+					end
+		
+					if headers['set-cookie']
+						info[:cookie] = headers['set-cookie'].join("\n")
+					end
+
+					if headers['authorization']
+						info[:auth] = headers['authorization'].join("\n")
+					end
+
+					if headers['location']
+						info[:location] = headers['location'][0]
+					end
+		
+					if headers['last-modified']
+						info[:mtime] = headers['last-modified'][0]
+					end
+									
+					# Report the web page to the database
+					report_web_page(info)
+					
+					yield(:web_page, url) if block
+				end
+			end # End web_page reporting
+			
+			method = netsparker_method_map(vuln)
+			pname  = netsparker_pname_map(vuln)
+			params = netsparker_params_map(vuln)
+
+		
+			info = {
+				:path     => uri.path,
+				:query    => uri.query,
+				:method   => method,
+				:params   => params,
+				:pname    => pname.to_s,
+				:proof    => vuln['info'] || body || "",
+				:risk     => web_lookup_risk_value(msf_vrisk),
+				:name     => vuln['type'] || ""
+			}
+			info.merge!(data)
+			
+			next if vuln['type'].to_s.empty?
+			report_web_vuln(info)
+			yield(:web_vuln, url) if block			
+		end
+
+		# We throw interrupts in our parser when the job is hopeless
+		begin
+			REXML::Document.parse_stream(data, parser)
+		rescue ::Interrupt
+			wlog("The netsparker_xml_import() job was interrupted: #{e}")
+		end
+	end
+	
+	def web_lookup_risk_value(rname)
+		%W{none info disclosure low medium high}.index(rname.to_s.downcase) || 0
+	end
+	
+	def netsparker_method_map(vuln)
+		case vuln['vparam_type']
+		when "FullQueryString"
+			"GET"
+		when "Querystring"
+			"GET"
+		when "Post"
+			"POST"
+		when "RawUrlInjection"
+			"GET"
+		else
+			"GET"
+		end
+	end
+	
+	def netsparker_pname_map(vuln)
+		case vuln['vparam_name']
+		when "URI-BASED"
+		when "Query Based"
+		else
+			vuln['vparam_name']
+		end
+	end
+	
+	def netsparker_params_map(vuln)
+		[]
+	end
+	
+	def netsparker_vuln_map(vtype)
+		case vtype
+		when "ApacheDirectoryListing"
+			[:low, :info]
+		when "ApacheMultiViewsEnabled"
+			[:low, :info]		
+		when "ApacheVersion"
+			[:none, :info]
+		when "AutoCompleteEnabled"
+			[:low, :info]		
+		when "ConfirmedBlindSQLInjection"
+			[:high, :sql]		
+		when "ConfirmedSQLInjection"
+			[:high, :sql]				
+		when "CookieNotMarkedAsHttpOnly"
+			[:none, :info]		
+		when "DatabaseErrorMessages"
+			[:medium, :info]		
+		when "EmailDisclosure"
+			[:none, :info]		
+		when "FileUploadFound"
+			[:none, :info]			
+		when "ForbiddenResource"
+			[:none, :info]			
+		when "HighlyPossibleSqlInjection"
+			[:medium, :sql]	 
+		when "MySQL5Identified"
+			[:none, :info]		
+		when "PHPVersion"
+			[:none, :info]		
+		when "PasswordOverHTTP"
+			[:medium, :info]			
+		when "PossibleInternalWindowsPathLeakage"
+			[:medium, :info]		
+		when "PossibleXSS", "LowPossibilityPermanentXSS"
+			[:low, :xss]
+		when "XSS", "PermanentXSS"
+			[:medium, :xss]
+		else
+			[:none, :info]
+		end
+	end
+	
 	#
 	# Import Nmap's -oX xml output
 	#
@@ -2341,7 +3122,7 @@ class DBManager
 				data = {}
 				data[:workspace] = wspace
 				if fix_services
-					data[:proto] = nmap_msfx_service_map(p["protocol"])
+					data[:proto] = nmap_msf_service_map(p["protocol"])
 				else
 					data[:proto] = p["protocol"].downcase
 				end
@@ -2359,7 +3140,7 @@ class DBManager
 		REXML::Document.parse_stream(data, parser)
 	end
 
-	def nmap_msfx_service_map(proto)
+	def nmap_msf_service_map(proto)
 		return proto unless proto.kind_of? String
 		case proto.downcase
 		when "msrpc", "nfs-or-iis";         "dcerpc"
@@ -2554,77 +3335,7 @@ class DBManager
 			end
 		end
 	end
-	#XXX Left this here just incase we need to swap back.
-	#def import_nessus_xml_v2(args={}, &block)
-	#	data = args[:data]
-	#	wspace = args[:wspace] || workspace
-	#	bl = validate_ips(args[:blacklist]) ? args[:blacklist].split : []
-	#
-	#	doc = rexmlify(data)
-	#	doc.elements.each('/NessusClientData_v2/Report/ReportHost') do |host|
-	#		# if Nessus resovled the host, its host-ip tag should be set
-	#		# otherwise, fall back to the name attribute which would
-	#		# logically need to be an IP address
-	#		begin
-	#			addr = host.elements["HostProperties/tag[@name='host-ip']"].text
-	#		rescue
-	#			addr = host.attribute("name").value
-	#		end
-	#
-	#		next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
-	#		if bl.include? addr
-	#			next
-	#		else
-	#			yield(:address,addr) if block
-	#		end
-	#
-	#		os = host.elements["HostProperties/tag[@name='operating-system']"]
-	#		if os
-	#			report_note(
-	#				:workspace => wspace,
-	#				:host => addr,
-	#				:type => 'host.os.nessus_fingerprint',
-	#				:data => {
-	#					:os => os.text.to_s.strip
-	#				}
-	#			)
-	#		end
-	#
-	#		hname = host.elements["HostProperties/tag[@name='host-fqdn']"]
-	#		if hname
-	#			report_host(
-	#				:workspace => wspace,
-	#				:host => addr,
-	#				:name => hname.text.to_s.strip
-	#			)
-	#		end
-	#
-	#		mac = host.elements["HostProperties/tag[@name='mac-address']"]
-	#		if mac
-	#			report_host(
-	#				:workspace => wspace,
-	#				:host => addr,
-	#				:mac  => mac.text.to_s.strip.upcase
-	#			)
-	#		end
-	#
-	#		host.elements.each('ReportItem') do |item|
-	#			nasl = item.attribute('pluginID').value
-	#			port = item.attribute('port').value
-	#			proto = item.attribute('protocol').value
-	#			name = item.attribute('svc_name').value
-	#			severity = item.attribute('severity').value
-	#			description = item.elements['plugin_output']
-	#			cve = item.elements['cve']
-	#			bid = item.elements['bid']
-	#			xref = item.elements['xref']
-	#
-	#			handle_nessus_v2(wspace, addr, port, proto, name, nasl, severity, description, cve, bid, xref)
-	#
-	#		end
-	#	end
-	#end
-	
+
 	def import_nessus_xml_v2(args={}, &block)
 		data = args[:data]
 		wspace = args[:wspace] || workspace
@@ -2717,7 +3428,6 @@ class DBManager
 		REXML::Document.parse_stream(data, parser)
 		
 	end
-
 
 	#
 	# Import Qualys' xml output
@@ -2944,6 +3654,7 @@ class DBManager
 		end
 	end
 
+		
 protected
 
 	#
@@ -3058,6 +3769,7 @@ protected
 
 		report_vuln(vuln)
 	end
+
 
 	#
 	# Qualys report parsing/handling
