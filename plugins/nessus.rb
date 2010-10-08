@@ -588,15 +588,33 @@ module Msf
 				#puts(content.inspect)
 				framework.db.import({:data => content}) do |type,data|
                     case type
-						when :address
-							print("%bld%blu[*]%clr %bld#{data} %bld%red[")
-							$stdout.flush
-						when :port
-							print("%bld%grn#")
-							$stdout.flush
-						when :end
-							print("%bld%red]%clr\n")
-							$stdout.flush
+					when :address
+						@count = 0
+						print("%bld%blu[*]%clr %bld#{data}%clr")
+						$stdout.flush
+					when :port
+						print("\b")
+						case @count
+						when 0
+							print("%bld%grn|")
+							@count += 1
+						when 1
+							print("%bld%grn/")
+							@count += 1
+						when 2
+							print("%bld%grn-")
+							@count += 1
+						when 3
+							print("%bld%grn/")
+							@count = 0
+						end
+						$stdout.flush
+					when :end
+						print("\b Done!%clr\n")
+						$stdout.flush
+                    when :os
+						data.gsub!(/[\n\r]/," or ") if data
+						print(" #{data}  ")
                     end
 				end
 				print_good("Done")

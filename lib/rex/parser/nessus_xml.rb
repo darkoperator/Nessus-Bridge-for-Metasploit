@@ -32,12 +32,18 @@ class NessusXMLStreamParser
 			if attributes['name'] == "ip-addr"
 				@state = :is_ip
 			end
+			if attributes['name'] == "host-ip"
+				@state = :is_ip
+			end
 			if attributes['name'] == "operating-system"
 				@state = :is_os
 			end
 		when "ReportHost"
 			@host['hname'] = attributes['name']
 		when "ReportItem"
+			@cve = Array.new
+			@bid = Array.new
+			@xref = Array.new
 			@x = Hash.new
 			@x['nasl'] = attributes['pluginID']
 			@x['port'] = attributes['port']
@@ -70,11 +76,11 @@ class NessusXMLStreamParser
 		when :is_desc
 			@x['description'] = str
 		when :is_cve
-			@x['cve'] = str
+			@cve.push str
 		when :is_bid
-			@x['bid'] = str
+			@bid.push str
 		when :is_xref
-			@x['xref'] = str
+			@xref.push str
 		end
 	end
 
@@ -84,6 +90,9 @@ class NessusXMLStreamParser
 			on_found_host.call(@host) if on_found_host
 			reset_state
 		when "ReportItem"
+			@x['cve'] = @cve
+			@x['bid'] = @bid
+			@x['xref'] = @xref
 			@host['ports'].push @x
 		end
 		@state = :generic_state

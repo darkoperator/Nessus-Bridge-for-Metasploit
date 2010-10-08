@@ -2662,8 +2662,9 @@ class DBManager
 			
 	
 			os = host['os']
-			$stdout.print(os)
+			yield(:os,os) if block
 			if os
+				
 				report_note(
 					:workspace => wspace,
 					:host => addr,
@@ -3026,16 +3027,16 @@ protected
 
 		refs = []
 
-		cve.collect do |r|
+		cve.each do |r|
 			r.to_s.gsub!(/C(VE|AN)\-/, '')
 			refs.push('CVE-' + r.to_s)
 		end if cve
 
-		bid.collect do |r|
+		bid.each do |r|
 			refs.push('BID-' + r.to_s)
 		end if bid
 
-		xref.collect do |r|
+		xref.each do |r|
 			ref_id, ref_val = r.to_s.split(':')
 			ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
 		end if xref
