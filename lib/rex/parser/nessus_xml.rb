@@ -1,4 +1,5 @@
 require 'rexml/document'
+require 'rex/ui'
 
 module Rex
 module Parser
@@ -60,8 +61,13 @@ class NessusXMLStreamParser
 			@state = :is_xref
 		when "solution"
 			@state = :is_solution
+		when "metasploit_name"
+			@state = :msf
 		end
 	end
+	
+	
+	
 	
 	def text(str)
 		case @state
@@ -81,6 +87,17 @@ class NessusXMLStreamParser
 			@bid.push str
 		when :is_xref
 			@xref.push str
+		when :msf
+			#this requires that the user has run nessus_exploits to build the index.  Not ready for primetime.
+			#regex = Regexp.new(str, true, 'n')
+			#File.open("xindex", "r") do |m|
+			#	while line = m.gets
+			#		if (line.match(regex))
+			#			exp = line.split("|").first
+			#			@x['msf'] = exp
+			#		end 
+			#	end  
+			#end
 		end
 	end
 

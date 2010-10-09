@@ -34,8 +34,6 @@
 require 'uri'
 require 'net/https'
 require 'rexml/document'
-require "rexml/streamlistener"
-include REXML
 
 # NessusXMLRPC module
 # 
@@ -229,7 +227,6 @@ module NessusXMLRPC
 		def template_list_hash
 			post= { "token" => @token }
 			docxml = nessus_request('scan/list', post)
-			$stdout.puts(docxml)
 			templates = Array.new
 			docxml.elements.each('/reply/contents/templates/template') { |template|
 				entry=Hash.new
@@ -264,29 +261,7 @@ module NessusXMLRPC
 			return policies
 		end
 	
-		# get hash of templates
-		#
-		# returns: array of hash of templates
-		def template_list_hash
-			post= { "token" => @token }
-			docxml = nil
-			docxml=nessus_request('scan/list', post)
-			if docxml.nil?
-				return
-			end
-			scans=Array.new
-			docxml.root.elements['contents'].elements['scans'].elements['scanList'].each_element('//scan') {|scan|
-				entry=Hash.new
-				entry['id']=scan.elements['uuid'].text if scan.elements['uuid']
-				entry['name']=scan.elements['readableName'].text if scan.elements['readableName']
-				entry['current']=scan.elements['completion_current'].text if scan.elements['completion_current']
-				entry['total']=scan.elements['completion_total'].text if scan.elements['completion_total']
-				scans.push(entry)
-			}
-			return scans
-		end
-	
-		# get hash of templates
+		# get hash of reportss
 		#
 		# returns: array of hash of templates
 		def report_list_hash
@@ -469,9 +444,11 @@ module NessusXMLRPC
 		# returns: XML file of report (nessus v2 format)
 		def report_file_download(report)
 			post= { "token" => @token, "report" => report }
-			
+			file = nil
 			file=nessus_http_request('file/report/download', post)
-			
+			if file.nil?
+				return
+			end
 			return file
 		end
 
@@ -626,21 +603,21 @@ module NessusXMLRPC
 		# get host details for particular host identified by report id
 		#
 		# returns: severity, current, total
-		def report_get_host(report_id,host)
+		def report_get_host(report_id,hostname)
 			post= { "token" => @token, "report" => report_id }
 			docxml = nil
 			docxml=nessus_request('report/hosts', post)
 			if docxml.nil?
 				return
 			end
-			docxml.root.elements['contents'].elements['hostList'].each_element('//host') { |host|
-				if host.elements['hostname'].text == host
+			docxml.elements.each('/reply/contents/hostList/host') do |host|
+				if host.elements['hostname'].text == hostname
 					severity = host.elements['severity'].text
 					current = host.elements['scanProgressCurrent'].text
 					total = host.elements['scanProgressTotal'].text
 					return severity, current, total
 				end
-			}
+			end
 		end
 	
 		# gets a list of each plugin family and the number of plugins for that family.
@@ -678,8 +655,6 @@ module NessusXMLRPC
 				users.push(entry)
 			}
 			return users
-		
-
 		end
 	
 		# returns basic data about the feed type and versions.
@@ -771,8 +746,6 @@ module NessusXMLRPC
 			if docxml.nil?
 				return
 			end
-			#return docxml
-			#details=Array.new
 			entry=Hash.new
 			docxml.elements.each('reply/contents/pluginDescription') { |desc|
 				entry['name'] = desc.elements['pluginName'].text
@@ -793,8 +766,6 @@ module NessusXMLRPC
 					entry['cvss_base_score'] = attr.elements['cvss_base_score'].text if attr.elements['cvss_base_score']
 				}
 			}
-		
-		
 			return entry
 		end
 	

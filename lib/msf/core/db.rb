@@ -395,10 +395,12 @@ class DBManager
 	#
 	# opts must contain
 	#   :ua_string  -- the value of the User-Agent header
+	#   :host       -- the host where this client connected from, can be an ip address or a Host object
 	#
 	# opts can contain
 	#   :ua_name    -- one of the Msf::HttpClients constants
 	#   :ua_ver     -- detected version of the given client
+	#   :campaign   -- an id or Campaign object
 	#
 	# Returns a Client.
 	#
@@ -413,6 +415,17 @@ class DBManager
 		task = queue(Proc.new {
 			host = get_host(:workspace => wspace, :host => addr)
 			client = host.clients.find_or_initialize_by_ua_string(opts[:ua_string])
+
+			campaign = opts.delete(:campaign)
+			if campaign
+				case campaign
+				when Campaign
+					opts[:campaign_id] = campaign.id
+				else
+					opts[:campaign_id] = campaign
+				end
+			end
+
 			opts.each { |k,v|
 				if (client.attribute_names.include?(k.to_s))
 					client[k] = v
@@ -3405,8 +3418,10 @@ class DBManager
 					:mac  => mac.to_s.strip.upcase
 				)
 			end
-	
+			
 			host['ports'].each do |item|
+				next if item['port'] == 0
+				msf = nil
 				nasl = item['nasl'].to_s
 				port = item['port'].to_s
 				proto = item['proto'] || "tcp"
@@ -3416,10 +3431,11 @@ class DBManager
 				cve = item['cve'] 
 				bid = item['bid']
 				xref = item['xref']
+				msf = item['msf']
 				
 				yield(:port,port) if block
 				
-				handle_nessus_v2(wspace, addr, port, proto, hname, nasl, severity, description, cve, bid, xref)
+				handle_nessus_v2(wspace, addr, port, proto, hname, nasl, severity, description, cve, bid, xref, msf)
 	
 			end
 			yield(:end,hname) if block
@@ -3721,7 +3737,7 @@ protected
 	# NESSUS v2 file format has a dramatically different layout
 	# for ReportItem data
 	#
-	def handle_nessus_v2(wspace,addr,port,proto,name,nasl,severity,description,cve,bid,xref)
+	def handle_nessus_v2(wspace,addr,port,proto,name,nasl,severity,description,cve,bid,xref,msf)
 
 		report_host(:workspace => wspace, :host => addr, :state => Msf::HostState::Alive)
 
@@ -3751,7 +3767,10 @@ protected
 			ref_id, ref_val = r.to_s.split(':')
 			ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
 		end if xref
-
+		
+		msfref = "MSF-" << msf if msf
+		refs.push msfref if msfref
+		
 		nss = 'NSS-' + nasl
 
 		vuln = {
