@@ -53,9 +53,61 @@ module Msf
 					"nessus_policy_list" => "List all polciies",
 					"nessus_policy_del" => "Delete a policy",
 					"nessus_exploits" => "Generates a search index for exploits.",
-					"nessus_template_list" => "List all the templates on the server"
+					"nessus_template_list" => "List all the templates on the server",
+					"nessus_db_scan" => "Create a scan of all ips in db_hosts"
 				}
 			end
+			
+			def cmd_nessus_db_scan(*args)
+				if args[0] == "-h"
+					print_status("Usage: ")
+					print_status("       nessus_db_scan <policy id> <scan name>")
+					print_status(" Example:> nessus_db_scan 1 \"My Scan\"")
+					print_status()
+					print_status("Creates a scan based on all the hosts listed in db_hosts.")
+					print_status("use nessus_policy_list to list all available policies")
+					return
+				end
+			
+				if ! nessus_verify_token
+					return
+				end
+			
+				case args.length
+				when 2
+					pid = args[0].to_i
+					name = args[1]
+				else
+					print_status("Usage: ")
+					print_status("       nessus_db_scan <policy id> <scan name>")
+					print_status("       use nessus_policy_list to list all available policies")
+					return
+				end
+				
+				if check_policy(pid)
+					print_error("That policy does not exist.")
+					return
+				end
+				
+				tgts = ""
+				framework.db.hosts(framework.db.workspace).each do |host|
+					
+					tgts << host.address
+					tgts << ","
+				end
+				
+				tgts.chop!
+			
+				print_status("Creating scan from policy number #{pid}, called \"#{name}\" and scanning all hosts in workspace")
+			
+				scan = @n.scan_new(pid, name, tgts)
+				
+				if scan
+					print_status("Scan started.  uid is #{scan}")
+				end
+				
+			end
+			
 			
 			def cmd_nessus_exploits
 				#need to expand this to index all modules.  What kind of info is needed?
