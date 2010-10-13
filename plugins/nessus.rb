@@ -1,5 +1,6 @@
 
 require 'nessus/nessus-xmlrpc'
+require 'rex/parser/nessus_xml'
 
 module Msf
 
@@ -54,9 +55,196 @@ module Msf
 					"nessus_policy_del" => "Delete a policy",
 					"nessus_exploits" => "Generates a search index for exploits.",
 					"nessus_template_list" => "List all the templates on the server",
-					"nessus_db_scan" => "Create a scan of all ips in db_hosts"
+					"nessus_db_scan" => "Create a scan of all ips in db_hosts",
+					"nessus_report_summary" => "Shows a summary of all the vulns in a scan that have a msf exploit."
 				}
 			end
+			
+			def cmd_nessus_report_summary(*args)
+				
+				if args[0] == "-h"
+					print_status("Usage: ")
+					print_status("       nessus_find targets")
+					print_status(" Example:> nessus_find_targets")
+					print_status()
+					print_status("Finds targets based on refs and vulns in your workspace.")
+					print_status("%redThis plugin is experimental%clr")
+					return
+				end
+				
+				if ! nessus_verify_db
+					print_error("You need a database configured for this command.")
+					print_error("Connect to a db with \"db_connect\"")
+					print_error("Then import scan with nessus_report_get")
+					return
+				end
+				
+				if ! nessus_verify_token
+					return
+				end
+				
+				rid = nil
+			
+				case args.length
+				when 1
+					rid = args[0]
+				else
+					print_status("Usage: ")
+					print_status("       nessus_report_get <report id> ")
+					print_status("       use nessus_report_list to list all available reports for importing")
+					return
+				end
+				
+				if check_scan(rid)
+					print_error("That scan is still running.")
+					return
+				end
+				
+				#streaming parser ftw.
+				content = nil
+				content=@n.report_file_download(rid)
+				if content.nil?
+					print_error("Failed, please reauthenticate")
+					return
+				end
+				print_status("Examining " + rid)
+				
+				#@host = {
+						#'hname'             => nil,
+						#'addr'              => nil,
+						#'mac'               => nil,
+						#'os'                => nil,
+						#'ports'             => [ 'port' => {    'port'              	=> nil,
+						#					'svc_name'              => nil,
+						#					'proto'              	=> nil,
+						#					'severity'              => nil,
+						#					'nasl'              	=> nil,
+						#					'description'           => nil,
+						#					'cve'                   => [],
+						#					'bid'                   => [],
+						#					'xref'                  => []
+						#				}
+						#			]
+						#}
+				parser = Rex::Parser::NessusXMLStreamParser.new
+				parser.on_found_host = Proc.new { |host|
+					
+					addr = host['addr'] || host['hname']
+					addr.gsub!(/[\n\r]/," or ") if addr
+					
+					#next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
+					
+					#if bl.include? addr
+					#	next
+					#else
+					#	yield(:address,addr) if block
+					#end
+					
+			
+					os = host['os']
+					os.gsub!(/[\n\r]/," or ") if os
+					#yield(:os,os) if block
+					#if os
+					#	
+					#	report_note(
+					#		:workspace => wspace,
+					#		:host => addr,
+					#		:type => 'host.os.nessus_fingerprint',
+					#		:data => {
+					#			:os => os.to_s.strip
+					#		}
+					#	)
+					#end
+			
+					hname = host['hname']
+					hname.gsub!(/[\n\r]/," or ") if hname
+					
+					#if hname
+					#	report_host(
+					#		:workspace => wspace,
+					#		:host => addr,
+					#		:name => hname.to_s.strip
+					#	)
+					#end
+			
+					mac = host['mac']
+					mac.gsub!(/[\n\r]/," or ") if mac
+					#if mac
+					#	report_host(
+					#		:workspace => wspace,
+					#		:host => addr,
+					#		:mac  => mac.to_s.strip.upcase
+					#	)
+					#end
+					
+					host['ports'].each do |item|
+						#p item['msf']
+						#puts(item.inspect)
+						next if item['port'] == 0
+						exp = nil
+						msf = nil
+						nasl = item['nasl'].to_s
+						port = item['port'].to_s
+						proto = item['proto'] || "tcp"
+						name = item['svc_name']
+						severity = item['severity']
+						description = item['description']
+						cve = item['cve'] 
+						bid = item['bid']
+						xref = item['xref']
+						msf = item['msf']
+						#p msf
+						if msf
+							regex = Regexp.new(msf, true, 'n')
+							File.open("xindex", "r") do |m|
+								while line = m.gets
+									if (line.match(regex))
+										
+										exp = line.split("|").first
+										#print(exp)
+										#print(@arch)
+										#archex = Regexp.new(@arch,true, 'n')
+										#if (exp.match(archex))
+											
+										#end
+									end 
+								end  
+							end
+						end
+						refs = []
+
+						cve.each do |r|
+							r.to_s.gsub!(/C(VE|AN)\-/, '')
+							refs.push('CVE-' + r.to_s)
+						end if cve
+				
+						bid.each do |r|
+							refs.push('BID-' + r.to_s)
+						end if bid
+				
+						xref.each do |r|
+							ref_id, ref_val = r.to_s.split(':')
+							ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
+						end if xref
+						
+						msfref = "MSF-" << exp if exp
+						refs.push msfref if msfref
+		
+						nss = 'NSS-' + nasl
+						
+						
+						
+						next if msf.nil?
+						print("#{addr} | #{os} | #{port} | #{nss} | Sev #{severity} | %bld%red#{msfref}%clr\n")
+						#handle_nessus_v2(wspace, addr, port, proto, hname, nasl, severity, description, cve, bid, xref, msf)
+			
+					end
+				}
+				
+				REXML::Document.parse_stream(content, parser)
+				
+			end
+
 			
 			def cmd_nessus_db_scan(*args)
 				if args[0] == "-h"
@@ -117,6 +305,9 @@ module Msf
 				#If the version line at start of current index doesnt match rev number of msf, rebuild index
 				
 				start = Time.now
+				@count = 0
+				print_status("Building the exploits search index")
+				print("%bld%grn[")
 				File.open("xindex", "w+") do |f|
 				framework.exploits.sort.each { |refname, mod|
 					stuff = ""
@@ -138,9 +329,26 @@ module Msf
 					end
 					stuff << "\n"
 					f.puts(stuff)
+					
+					case @count
+					when 0
+						print("%bld%grn|]\b\b")
+						@count += 1
+					when 1
+						print("%bld%grn/]\b\b")
+						@count += 1
+					when 2
+						print("%bld%grn-]\b\b")
+						@count += 1
+					when 3
+						print("%bld%grn/]\b\b")
+						@count = 0
+					end
+					$stdout.flush
 				}
 				end
 				total = Time.now - start
+				print("%bld%grn*] Done!\n")
 				print_status("It has taken : #{total} seconds to build the exploits search index")
 			end
 		

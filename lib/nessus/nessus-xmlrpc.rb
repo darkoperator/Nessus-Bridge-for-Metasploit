@@ -35,6 +35,7 @@ require 'uri'
 require 'net/https'
 require 'rexml/document'
 
+
 # NessusXMLRPC module
 # 
 # Usage:
@@ -805,6 +806,8 @@ module NessusXMLRPC
 			}
 			return prefs
 		end
+		
+		
 	end # end of NessusXMLRPC::Class
 
 end # of Module

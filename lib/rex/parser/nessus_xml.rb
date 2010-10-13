@@ -17,7 +17,7 @@ class NessusXMLStreamParser
 	def reset_state
 		@host = {'hname' => nil, 'addr' => nil, 'mac' => nil, 'os' => nil, 'ports' => [
 			'port' => {'port' => nil, 'svc_name'  => nil, 'proto' => nil, 'severity' => nil,
-			'nasl' => nil, 'description' => nil, 'cve' => [], 'bid' => [], 'xref' => []	} ] }
+			'nasl' => nil, 'description' => nil, 'cve' => [], 'bid' => [], 'xref' => [], 'msf' => nil } ] }
 		@state = :generic_state
 	end
 
@@ -41,6 +41,7 @@ class NessusXMLStreamParser
 			end
 		when "ReportHost"
 			@host['hname'] = attributes['name']
+			#$stdout.puts(@host['hname'])
 		when "ReportItem"
 			@cve = Array.new
 			@bid = Array.new
@@ -62,6 +63,7 @@ class NessusXMLStreamParser
 		when "solution"
 			@state = :is_solution
 		when "metasploit_name"
+			#$stdout.puts("msf")
 			@state = :msf
 		end
 	end
@@ -88,16 +90,8 @@ class NessusXMLStreamParser
 		when :is_xref
 			@xref.push str
 		when :msf
-			#this requires that the user has run nessus_exploits to build the index.  Not ready for primetime.
-			#regex = Regexp.new(str, true, 'n')
-			#File.open("xindex", "r") do |m|
-			#	while line = m.gets
-			#		if (line.match(regex))
-			#			exp = line.split("|").first
-			#			@x['msf'] = exp
-			#		end 
-			#	end  
-			#end
+			#p str
+			@x['msf'] = str
 		end
 	end
 
