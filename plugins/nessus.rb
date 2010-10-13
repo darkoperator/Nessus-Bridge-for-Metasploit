@@ -64,10 +64,10 @@ module Msf
 				
 				if args[0] == "-h"
 					print_status("Usage: ")
-					print_status("       nessus_find targets")
-					print_status(" Example:> nessus_find_targets")
+					print_status("       nessus_report_summary <report id>")
+					print_status(" Example:> nessus_report_summary 33ebfd80-5e6f-348d-8f15-04628b5f5ca789bb25241af01698")
 					print_status()
-					print_status("Finds targets based on refs and vulns in your workspace.")
+					print_status("Parses your report and just shows you exploitable vulns.")
 					print_status("%redThis plugin is experimental%clr")
 					return
 				end
@@ -90,8 +90,8 @@ module Msf
 					rid = args[0]
 				else
 					print_status("Usage: ")
-					print_status("       nessus_report_get <report id> ")
-					print_status("       use nessus_report_list to list all available reports for importing")
+					print_status("       nessus_report_summary <report id>")
+					print_status("Parses your report and just shows you exploitable vulns.")
 					return
 				end
 				
@@ -108,78 +108,25 @@ module Msf
 					return
 				end
 				print_status("Examining " + rid)
-				
-				#@host = {
-						#'hname'             => nil,
-						#'addr'              => nil,
-						#'mac'               => nil,
-						#'os'                => nil,
-						#'ports'             => [ 'port' => {    'port'              	=> nil,
-						#					'svc_name'              => nil,
-						#					'proto'              	=> nil,
-						#					'severity'              => nil,
-						#					'nasl'              	=> nil,
-						#					'description'           => nil,
-						#					'cve'                   => [],
-						#					'bid'                   => [],
-						#					'xref'                  => []
-						#				}
-						#			]
-						#}
+				print_error("Experimental, trust but verify")
+				print("\n")
 				parser = Rex::Parser::NessusXMLStreamParser.new
 				parser.on_found_host = Proc.new { |host|
 					
 					addr = host['addr'] || host['hname']
 					addr.gsub!(/[\n\r]/," or ") if addr
-					
-					#next unless ipv4_validator(addr) # Catches SCAN-ERROR, among others.
-					
-					#if bl.include? addr
-					#	next
-					#else
-					#	yield(:address,addr) if block
-					#end
-					
 			
 					os = host['os']
 					os.gsub!(/[\n\r]/," or ") if os
-					#yield(:os,os) if block
-					#if os
-					#	
-					#	report_note(
-					#		:workspace => wspace,
-					#		:host => addr,
-					#		:type => 'host.os.nessus_fingerprint',
-					#		:data => {
-					#			:os => os.to_s.strip
-					#		}
-					#	)
-					#end
 			
 					hname = host['hname']
 					hname.gsub!(/[\n\r]/," or ") if hname
-					
-					#if hname
-					#	report_host(
-					#		:workspace => wspace,
-					#		:host => addr,
-					#		:name => hname.to_s.strip
-					#	)
-					#end
 			
 					mac = host['mac']
 					mac.gsub!(/[\n\r]/," or ") if mac
-					#if mac
-					#	report_host(
-					#		:workspace => wspace,
-					#		:host => addr,
-					#		:mac  => mac.to_s.strip.upcase
-					#	)
-					#end
 					
 					host['ports'].each do |item|
-						#p item['msf']
-						#puts(item.inspect)
+						
 						next if item['port'] == 0
 						exp = nil
 						msf = nil
@@ -193,21 +140,12 @@ module Msf
 						bid = item['bid']
 						xref = item['xref']
 						msf = item['msf']
-						#p msf
+						
 						if msf
 							regex = Regexp.new(msf, true, 'n')
 							File.open("xindex", "r") do |m|
 								while line = m.gets
-									if (line.match(regex))
-										
-										exp = line.split("|").first
-										#print(exp)
-										#print(@arch)
-										#archex = Regexp.new(@arch,true, 'n')
-										#if (exp.match(archex))
-											
-										#end
-									end 
+									exp = line.split("|").first if (line.match(regex))
 								end  
 							end
 						end
@@ -226,26 +164,17 @@ module Msf
 							ref_id, ref_val = r.to_s.split(':')
 							ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
 						end if xref
-						
+			
 						msfref = "MSF-" << exp if exp
 						refs.push msfref if msfref
-		
 						nss = 'NSS-' + nasl
-						
-						
-						
 						next if msf.nil?
 						print("#{addr} | #{os} | #{port} | #{nss} | Sev #{severity} | %bld%red#{msfref}%clr\n")
-						#handle_nessus_v2(wspace, addr, port, proto, hname, nasl, severity, description, cve, bid, xref, msf)
-			
 					end
 				}
-				
 				REXML::Document.parse_stream(content, parser)
-				
 			end
 
-			
 			def cmd_nessus_db_scan(*args)
 				if args[0] == "-h"
 					print_status("Usage: ")

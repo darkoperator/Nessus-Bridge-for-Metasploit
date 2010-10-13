@@ -68,9 +68,6 @@ class NessusXMLStreamParser
 		end
 	end
 	
-	
-	
-	
 	def text(str)
 		case @state
 		when :is_fqdn
