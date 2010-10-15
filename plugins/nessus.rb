@@ -57,7 +57,32 @@ module Msf
 					"nessus_template_list" => "List all the templates on the server",
 					"nessus_db_scan" => "Create a scan of all ips in db_hosts",
 					"nessus_report_summary" => "Shows a summary of all the vulns in a scan that have a msf exploit."
+				start = Time.now
+				File.open("xindex", "w+") do |f|
+				framework.exploits.sort.each { |refname, mod|
+					stuff = ""
+					o = nil
+					begin
+						o = mod.new
+					rescue ::Exception
+					end
+					stuff << "#{refname}|#{o.name}|#{o.platform_to_s}|#{o.arch_to_s}"
+					next if not o
+					o.references.map do |x|
+						if !(x.ctx_id == "URL")
+							if (x.ctx_id == "MSB")
+								stuff << "|#{x.ctx_val}"
+							else
+								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
+							end
+						end
+					end
+					stuff << "\n"
+					f.puts(stuff)
 				}
+				end
+				total = Time.now - start
+				print_status("It has taken : #{total} seconds to build the exploits search index")
 			end
 			
 			def cmd_nessus_report_summary(*args)
