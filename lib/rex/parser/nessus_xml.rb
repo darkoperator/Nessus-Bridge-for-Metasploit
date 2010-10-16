@@ -41,7 +41,6 @@ class NessusXMLStreamParser
 			end
 		when "ReportHost"
 			@host['hname'] = attributes['name']
-			#$stdout.puts(@host['hname'])
 		when "ReportItem"
 			@cve = Array.new
 			@bid = Array.new
@@ -63,7 +62,6 @@ class NessusXMLStreamParser
 		when "solution"
 			@state = :is_solution
 		when "metasploit_name"
-			#$stdout.puts("msf")
 			@state = :msf
 		end
 	end

@@ -57,6 +57,10 @@ module Msf
 					"nessus_template_list" => "List all the templates on the server",
 					"nessus_db_scan" => "Create a scan of all ips in db_hosts",
 					"nessus_report_summary" => "Shows a summary of all the vulns in a scan that have a msf exploit."
+					}
+			end
+			
+			def cmd_nessus_exploits
 				start = Time.now
 				File.open("xindex", "w+") do |f|
 				framework.exploits.sort.each { |refname, mod|
