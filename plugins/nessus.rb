@@ -4,20 +4,20 @@ require 'rex/parser/nessus_xml'
 
 module Msf
 	
-	NBVer = "1.0"
+	#constants
+	NBVer = "1.0" # Nessus Plugin Version.  Increments each time we commit to msf
+	Xindex = "#{Msf::Config.get_config_root}/nessus_index" # location of the exploit index file used to speed up searching for valid exploits.
 
 	class Plugin::Nessus < Msf::Plugin
 		
-		
-		
-		
-		
+		#creates the index of exploit details to make searching for exploits much faster.
 		def create_xindex
 			start = Time.now
-				print_status("Creating Exploit Search Index, this wont take long.")
+				print_status("Creating Exploit Search Index - (#{Xindex}) - this wont take long.")
 				print("%grn[*]")
 				count = 0
-				File.open("xindex", "w+") do |f|
+				# use Msf::Config.get_config_root as the location.
+				File.open("#{Xindex}", "w+") do |f|
 				#need to add version line.
 				f.puts(Msf::Framework::RepoRevision)
 				framework.exploits.sort.each { |refname, mod|
@@ -63,21 +63,20 @@ module Msf
 		end
 		
 		def nessus_index
-			if File.exist?("xindex")
+			if File.exist?("#{Xindex}")
 				puts("exists")
 				#check if it's version line matches current version.
-				File.open('xindex') {|f|
+				File.open("#{Xindex}") {|f|
 					line = f.readline
 					line.chomp!
 					p line
 					p Msf::Framework::RepoRevision
 					if line.to_i == Msf::Framework::RepoRevision
-						print_good("xindex is current")
+						print_good("Exploit Index - (#{Xindex}) -  is valid.")
 					else
 						create_xindex
 					end
 				}
-
 			else
 				create_xindex
 			end
@@ -129,7 +128,7 @@ module Msf
 					"nessus_plugin_prefs" => "Display Plugin Prefs",
 					"nessus_policy_list" => "List all polciies",
 					"nessus_policy_del" => "Delete a policy",
-					"nessus_index" => "Generates a search index for exploits.",
+					"nessus_index" => "Manually generates a search index for exploits.",
 					"nessus_template_list" => "List all the templates on the server",
 					"nessus_db_scan" => "Create a scan of all ips in db_hosts",
 					"nessus_report_exploits" => "Shows a summary of all the vulns in a scan that have a msf exploit."
@@ -193,16 +192,15 @@ module Msf
 				print("\n")
 				parser = Rex::Parser::NessusXMLStreamParser.new
 				parser.on_found_host = Proc.new { |host|
-					
 					addr = host['addr'] || host['hname']
 					addr.gsub!(/[\n\r]/," or ") if addr
-			
+					
 					os = host['os']
 					os.gsub!(/[\n\r]/," or ") if os
-			
+					
 					hname = host['hname']
 					hname.gsub!(/[\n\r]/," or ") if hname
-			
+					
 					mac = host['mac']
 					mac.gsub!(/[\n\r]/," or ") if mac
 					
@@ -224,7 +222,7 @@ module Msf
 						
 						if msf
 							regex = Regexp.new(msf, true, 'n')
-							File.open("xindex", "r") do |m|
+							File.open("#{Xindex}", "r") do |m|
 								while line = m.gets
 									exp = line.split("|").first if (line.match(regex))
 								end  
@@ -307,60 +305,60 @@ module Msf
 			end
 			
 			
-			def cmd_nessus_exploits
-				#need to expand this to index all modules.  What kind of info is needed?
-				#find a better place to keep the indexes and a way to name them
-				#put in version checking:
-				#check if exists and is a valid readable file (read first line)
-				#If the version line at start of current index doesnt match rev number of msf, rebuild index
-				
-				start = Time.now
-				@count = 0
-				print_status("Building the exploits search index")
-				print("%bld%grn[")
-				File.open("xindex", "w+") do |f|
-				framework.exploits.sort.each { |refname, mod|
-					stuff = ""
-					o = nil
-					begin
-						o = mod.new
-					rescue ::Exception
-					end
-					stuff << "#{refname}|#{o.name}|#{o.platform_to_s}|#{o.arch_to_s}"
-					next if not o
-					o.references.map do |x|
-						if !(x.ctx_id == "URL")
-							if (x.ctx_id == "MSB")
-								stuff << "|#{x.ctx_val}"
-							else
-								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
-							end
-						end
-					end
-					stuff << "\n"
-					f.puts(stuff)
-					
-					case @count
-					when 0
-						print("%bld%grn|]\b\b")
-						@count += 1
-					when 1
-						print("%bld%grn/]\b\b")
-						@count += 1
-					when 2
-						print("%bld%grn-]\b\b")
-						@count += 1
-					when 3
-						print("%bld%grn/]\b\b")
-						@count = 0
-					end
-					$stdout.flush
-				}
-				end
-				total = Time.now - start
-				print("%bld%grn*] Done!\n")
-				print_status("It has taken : #{total} seconds to build the exploits search index")
-			end
+			#def cmd_nessus_exploits
+			#	#need to expand this to index all modules.  What kind of info is needed?
+			#	#find a better place to keep the indexes and a way to name them
+			#	#put in version checking:
+			#	#check if exists and is a valid readable file (read first line)
+			#	#If the version line at start of current index doesnt match rev number of msf, rebuild index
+			#	
+			#	start = Time.now
+			#	@count = 0
+			#	print_status("Building the exploits search index")
+			#	print("%bld%grn[")
+			#	File.open("xindex", "w+") do |f|
+			#	framework.exploits.sort.each { |refname, mod|
+			#		stuff = ""
+			#		o = nil
+			#		begin
+			#			o = mod.new
+			#		rescue ::Exception
+			#		end
+			#		stuff << "#{refname}|#{o.name}|#{o.platform_to_s}|#{o.arch_to_s}"
+			#		next if not o
+			#		o.references.map do |x|
+			#			if !(x.ctx_id == "URL")
+			#				if (x.ctx_id == "MSB")
+			#					stuff << "|#{x.ctx_val}"
+			#				else
+			#					stuff << "|#{x.ctx_id}-#{x.ctx_val}"
+			#				end
+			#			end
+			#		end
+			#		stuff << "\n"
+			#		f.puts(stuff)
+			#		
+			#		case @count
+			#		when 0
+			#			print("%bld%grn|]\b\b")
+			#			@count += 1
+			#		when 1
+			#			print("%bld%grn/]\b\b")
+			#			@count += 1
+			#		when 2
+			#			print("%bld%grn-]\b\b")
+			#			@count += 1
+			#		when 3
+			#			print("%bld%grn/]\b\b")
+			#			@count = 0
+			#		end
+			#		$stdout.flush
+			#	}
+			#	end
+			#	total = Time.now - start
+			#	print("%bld%grn*] Done!\n")
+			#	print_status("It has taken : #{total} seconds to build the exploits search index")
+			#end
 		
 			def cmd_nessus_logout
 				@token = nil
