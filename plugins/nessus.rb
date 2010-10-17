@@ -3,9 +3,85 @@ require 'nessus/nessus-xmlrpc'
 require 'rex/parser/nessus_xml'
 
 module Msf
+	
+	NBVer = "1.0"
 
 	class Plugin::Nessus < Msf::Plugin
-	
+		
+		
+		
+		
+		
+		def create_xindex
+			start = Time.now
+				print_status("Creating Exploit Search Index, this wont take long.")
+				print("%grn[*]")
+				count = 0
+				File.open("xindex", "w+") do |f|
+				#need to add version line.
+				f.puts(Msf::Framework::RepoRevision)
+				framework.exploits.sort.each { |refname, mod|
+					case count
+					when 0
+						print("\b\b\b[|]")
+						count += 1
+					when 1
+						print("\b\b\b[/]")
+						count += 1
+					when 2
+						print("\b\b\b[-]")
+						count += 1
+					when 3
+						print("\b\b\b[\\]")
+						count =0
+					end
+					stuff = ""
+					o = nil
+					begin
+						o = mod.new
+					rescue ::Exception
+					end
+					stuff << "#{refname}|#{o.name}|#{o.platform_to_s}|#{o.arch_to_s}"
+					next if not o
+					o.references.map do |x|
+						if !(x.ctx_id == "URL")
+							if (x.ctx_id == "MSB")
+								stuff << "|#{x.ctx_val}"
+							else
+								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
+							end
+						end
+					end
+					stuff << "\n"
+					f.puts(stuff)
+				}
+				end
+				total = Time.now - start
+				print("\b\b\b[*]%clr")
+				print("\n")
+				print_status("It has taken : #{total} seconds to build the exploits search index")
+		end
+		
+		def nessus_index
+			if File.exist?("xindex")
+				puts("exists")
+				#check if it's version line matches current version.
+				File.open('xindex') {|f|
+					line = f.readline
+					line.chomp!
+					p line
+					p Msf::Framework::RepoRevision
+					if line.to_i == Msf::Framework::RepoRevision
+						print_good("xindex is current")
+					else
+						create_xindex
+					end
+				}
+
+			else
+				create_xindex
+			end
+		end
 		###
 		#
 		# This class implements a sample console command dispatcher.
@@ -53,43 +129,19 @@ module Msf
 					"nessus_plugin_prefs" => "Display Plugin Prefs",
 					"nessus_policy_list" => "List all polciies",
 					"nessus_policy_del" => "Delete a policy",
-					"nessus_exploits" => "Generates a search index for exploits.",
+					"nessus_index" => "Generates a search index for exploits.",
 					"nessus_template_list" => "List all the templates on the server",
 					"nessus_db_scan" => "Create a scan of all ips in db_hosts",
-					"nessus_report_summary" => "Shows a summary of all the vulns in a scan that have a msf exploit."
+					"nessus_report_exploits" => "Shows a summary of all the vulns in a scan that have a msf exploit."
 					}
 			end
 			
-			def cmd_nessus_exploits
-				start = Time.now
-				File.open("xindex", "w+") do |f|
-				framework.exploits.sort.each { |refname, mod|
-					stuff = ""
-					o = nil
-					begin
-						o = mod.new
-					rescue ::Exception
-					end
-					stuff << "#{refname}|#{o.name}|#{o.platform_to_s}|#{o.arch_to_s}"
-					next if not o
-					o.references.map do |x|
-						if !(x.ctx_id == "URL")
-							if (x.ctx_id == "MSB")
-								stuff << "|#{x.ctx_val}"
-							else
-								stuff << "|#{x.ctx_id}-#{x.ctx_val}"
-							end
-						end
-					end
-					stuff << "\n"
-					f.puts(stuff)
-				}
-				end
-				total = Time.now - start
-				print_status("It has taken : #{total} seconds to build the exploits search index")
+		
+			def cmd_nessus_index
+				Msf::Plugin::Nessus.nessus_index
 			end
 			
-			def cmd_nessus_report_summary(*args)
+			def cmd_nessus_report_exploits(*args)
 				
 				if args[0] == "-h"
 					print_status("Usage: ")
@@ -1754,9 +1806,9 @@ module Msf
 			# that uses the framework's console user interface driver, register
 			# console dispatcher commands.
 			add_console_dispatcher(ConsoleCommandDispatcher)
-
-			print_status("Nessus Bridge for Nessus 4.2.x")
+			print_status("Nessus Bridge for Metasploit #{NBVer}")
 			print_good("Type %bldnessus_help%clr for a command listing")
+			nessus_index
 		end
 
 		#
