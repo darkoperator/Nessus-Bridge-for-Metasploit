@@ -64,13 +64,10 @@ module Msf
 		
 		def nessus_index
 			if File.exist?("#{Xindex}")
-				puts("exists")
 				#check if it's version line matches current version.
 				File.open("#{Xindex}") {|f|
 					line = f.readline
 					line.chomp!
-					p line
-					p Msf::Framework::RepoRevision
 					if line.to_i == Msf::Framework::RepoRevision
 						print_good("Exploit Index - (#{Xindex}) -  is valid.")
 					else
@@ -207,7 +204,8 @@ module Msf
 					host['ports'].each do |item|
 						
 						next if item['port'] == 0
-						exp = nil
+						
+						exp = []
 						msf = nil
 						nasl = item['nasl'].to_s
 						port = item['port'].to_s
@@ -220,35 +218,82 @@ module Msf
 						xref = item['xref']
 						msf = item['msf']
 						
+						# find exploits based on the msf plugin name from the report output.
 						if msf
 							regex = Regexp.new(msf, true, 'n')
 							File.open("#{Xindex}", "r") do |m|
 								while line = m.gets
-									exp = line.split("|").first if (line.match(regex))
+									exp.push line.split("|").first if (line.match(regex))
 								end  
 							end
 						end
-						refs = []
-
-						cve.each do |r|
-							r.to_s.gsub!(/C(VE|AN)\-/, '')
-							refs.push('CVE-' + r.to_s)
-						end if cve
-				
-						bid.each do |r|
-							refs.push('BID-' + r.to_s)
-						end if bid
-				
-						xref.each do |r|
-							ref_id, ref_val = r.to_s.split(':')
-							ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
-						end if xref
+						
+						# find exploits based on CVE
+						if cve
+							cve.each do |c|
+								regex = Regexp.new(c, true, 'n')
+								File.open("#{Xindex}", "r") do |m|
+									while line = m.gets
+										exp.push line.split("|").first if (line.match(regex))
+									end  
+								end
+							end
+						end
+						
+						#find exploits based on BID
+						if bid
+							bid.each do |c|
+								r = "BID-"
+								r << c
+								regex = Regexp.new(r, true, 'n')
+								File.open("#{Xindex}", "r") do |m|
+									while line = m.gets
+										exp.push line.split("|").first if (line.match(regex))
+									end  
+								end
+							end
+						end
+						
+						#find exploits based on OSVDB entry
+						
+						#find exploits based on MSB
+						if xref
+							xref.each do |c|
+								if c =~ /OSVDB/
+									c.gsub!(/:/, "-")
+									regex = Regexp.new(c, true, 'n')
+									File.open("#{Xindex}", "r") do |m|
+										while line = m.gets
+											exp.push line.split("|").first if (line.match(regex))
+										end  
+									end
+								end
+							end
+						end
+						
+						#make sure we only report a exploit once in exp. We should evaluate the accuracy of the exploit suggested too, weed out some obvious non starters.
+						
+						#refs = []
+						#
+						#cve.each do |r|
+						#	r.to_s.gsub!(/C(VE|AN)\-/, '')
+						#	refs.push('CVE-' + r.to_s)
+						#end if cve
+						#
+						#bid.each do |r|
+						#	refs.push('BID-' + r.to_s)
+						#end if bid
+						#
+						#xref.each do |r|
+						#	ref_id, ref_val = r.to_s.split(':')
+						#	ref_val ? refs.push(ref_id + '-' + ref_val) : refs.push(ref_id)
+						#end if xref
 			
-						msfref = "MSF-" << exp if exp
-						refs.push msfref if msfref
+						#msfref = "MSF-" << exp if exp
+						#refs.push msfref if msfref
 						nss = 'NSS-' + nasl
-						next if msf.nil?
-						print("#{addr} | #{os} | #{port} | #{nss} | Sev #{severity} | %bld%red#{msfref}%clr\n")
+						next if exp.empty?
+						print("#{addr} | #{os} | #{port} | #{nss} | Sev #{severity} | %bld%red#{exp.uniq}%clr\n")
 					end
 				}
 				REXML::Document.parse_stream(content, parser)
